@@ -400,7 +400,9 @@ built with no `DATABASE_URL`; `node dist/migrate.mjs` from the image created the
 table on a fresh database; a second run was a no-op; wrong credentials exited 1
 with `migrate: failed`; the server then started and `/api/health` returned 200.
 On Railway, the first deploys did not migrate because `railway.json` was ignored
-(see above).
+(see above). After `railway config apply` (17 September 2026) the redeploy's
+manifest showed the pre-deploy command and health check, and the pre-deploy step
+ran before the container started.
 
 ---
 
