@@ -31,7 +31,12 @@ export default defineConfig([
     // token layer was bypassed. Tokens and the showcase are where literal
     // values legitimately live.
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/styles/**", "src/components/showcase/**", "src/app/design-system/**"],
+    ignores: [
+      "src/styles/**",
+      "src/lib/brand-constants.ts",
+      "src/components/showcase/**",
+      "src/app/(app)/design-system/**",
+    ],
     rules: {
       "no-restricted-syntax": [
         "error",

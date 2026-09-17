@@ -7,10 +7,15 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-import { env } from "@/server/env";
+import { databaseEnv } from "@/server/env";
 
-// Notices ("schema already exists, skipping") are expected on every run.
-const sql = postgres(env().DATABASE_URL, { max: 1, connect_timeout: 10, onnotice: () => {} });
+// Only DATABASE_URL: a migration must not fail because an unrelated secret is
+// unset. Notices ("schema already exists, skipping") are expected on every run.
+const sql = postgres(databaseEnv().DATABASE_URL, {
+  max: 1,
+  connect_timeout: 10,
+  onnotice: () => {},
+});
 
 try {
   await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });

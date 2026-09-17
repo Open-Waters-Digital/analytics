@@ -1,6 +1,6 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { env } from "@/server/env";
+import { databaseEnv } from "@/server/env";
 import * as schema from "./schema";
 
 /**
@@ -21,7 +21,11 @@ const globalForDb = globalThis as unknown as { analyticsDb?: Database };
 export function getDb(): Database {
   if (globalForDb.analyticsDb) return globalForDb.analyticsDb;
 
-  const sql = postgres(env().DATABASE_URL, { max: 10, connect_timeout: 10, idle_timeout: 30 });
+  const sql = postgres(databaseEnv().DATABASE_URL, {
+    max: 10,
+    connect_timeout: 10,
+    idle_timeout: 30,
+  });
   const db = drizzle(sql, { schema, casing: "snake_case" });
   globalForDb.analyticsDb = db;
   return db;

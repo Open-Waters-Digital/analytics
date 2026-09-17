@@ -72,9 +72,19 @@ client's visitor-level data is stored.
 
 ### Access
 
-- 🟡 **Magic-link sign-in** (proposed: `add-magic-link-auth`). Better Auth, link
-  emailed via Resend, only allowlisted addresses may sign in, every page and
-  action behind a session check in the data access layer.
+- ✅ **Magic-link sign-in** (`add-magic-link-auth`, spec `access-control`).
+  Better Auth; links emailed via Resend, single use, 15 minutes; 30-day rolling
+  sessions. The allowlist (`AUTH_ALLOWED_EMAILS`) is checked before sending,
+  before creating a user and on every request, so removing an address revokes
+  access at once. Rate limit 5 link requests per 10 minutes per IP.
+  - **Every data read and write calls `requireSession()`** from
+    `src/server/session.ts` first. Pages inside `src/app/(app)/` are protected by
+    that group's layout (`requirePageSession()`), but a layout does not protect
+    server actions: actions and data functions check again.
+  - `src/proxy.ts` only redirects visitors with no session cookie. It never
+    grants access.
+  - Public routes: `/sign-in`, `/sign-in/check-email`, `/api/auth/*`,
+    `/api/health`. The list lives in `src/lib/proxy-policy.ts`.
 
 ### Client registry
 
@@ -108,7 +118,7 @@ Locked. Revisit only if a dependency changes.
 
 1. ✅ Bootstrap: toolchain, tokens, primitives, showcase, database plumbing,
    container, CI, OpenSpec.
-2. 🟡 `add-magic-link-auth`. Nothing is deployed before this exists.
+2. ✅ `add-magic-link-auth`.
 3. 🟡 `add-client-registry`. Includes the PostHog connection check.
 4. 🟡 First deploy to `analytics.openwaters.digital`, after the 🧱 list.
 5. 🟡 Nightly PostHog snapshot, with the Railway cron service.
@@ -129,13 +139,16 @@ Locked. Revisit only if a dependency changes.
 ├── openspec/              Specs and change proposals (config.yaml for rules)
 ├── src/
 │   ├── app/               Routes. Server components by default
-│   │   ├── api/health/    Liveness endpoint for Railway and Docker
-│   │   └── design-system/ Showcase of every primitive, variant and state
+│   │   ├── (app)/         Everything behind sign-in: layout checks the session
+│   │   │   └── design-system/  Showcase of every primitive, variant and state
+│   │   ├── sign-in/       Public sign-in and check-email pages
+│   │   └── api/           auth/[...all] (Better Auth), health/ (liveness)
 │   ├── components/
 │   │   ├── ui/            Primitives. variants.ts holds every style recipe
 │   │   └── showcase/      Section / Row / Entry for /design-system
-│   ├── db/                Drizzle schema and client. Server only
-│   ├── server/            Data access layer, env, server-side logic
+│   ├── db/                Drizzle schema and client. auth-schema.ts is generated
+│   ├── server/            Data access layer, env, auth, session gate. Server only
+│   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
 │   ├── lib/               Framework-free helpers safe for any module
 │   └── test/              Test-only stubs
@@ -159,8 +172,8 @@ Locked. Revisit only if a dependency changes.
 | Database       | Postgres 17 (Railway), Drizzle ORM 0.45, drizzle-kit  | ✅                     |
 | Validation     | Zod 4                                                 | ✅                     |
 | Tests          | Vitest                                                | ✅                     |
-| Auth           | Better Auth, magic link via Resend                    | 🟡                     |
-| Email          | Resend                                                | 🟡                     |
+| Auth           | Better Auth 1.7, magic link via Resend                | ✅                     |
+| Email          | Resend                                                | ✅                     |
 | Nightly jobs   | Railway cron service, bundled script, same image      | 🟡                     |
 | Error tracking | PostHog error tracking in an Open Waters organisation | 🧪                     |
 | Hosting        | Railway, Docker                                       | ✅ config, 🟡 deployed |
@@ -182,6 +195,12 @@ outside Next, so `scripts/build-scripts.mjs` bundles each into a self-contained
   are snake_case in Postgres, camelCase in TypeScript (`casing: "snake_case"`).
 - **Primary keys** are `uuid` generated in Postgres. The client **slug** is a
   unique, human-readable key, not the primary key.
+- **Better Auth's tables** (`users`, `sessions`, `accounts`, `verifications`,
+  `rate_limits`) are generated into `src/db/auth-schema.ts` by `pnpm auth:schema`
+  and never edited by hand. After changing `src/server/auth-config.ts`,
+  regenerate, then `pnpm db:generate`. They use Better Auth's column types,
+  including `timestamp` without time zone: an accepted exception to the rule
+  below.
 - **Timestamps** are `timestamptz`. Every table has `created_at` and
   `updated_at`.
 - **Money** is an integer in minor units plus an ISO 4217 currency column. Never
@@ -333,11 +352,19 @@ contract). See [Schema and data-layer conventions](#schema-and-data-layer-conven
 and no lockfile. The migration script is bundled with its dependencies into
 `dist/migrate.mjs`, and the SQL files are copied to `/app/drizzle`.
 
-**Railway service variables:** `DATABASE_URL` as a reference to the Postgres
-service (`${{Postgres.DATABASE_URL}}`, the private address). The pre-deploy
-step runs with the service's variables and network, so the private address
-works there. Later changes add their own variables to `.env.example` and to the
-first-deploy list below.
+**Railway service variables** (every one is documented in `.env.example`):
+
+| Variable              | Value on Railway                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`        | `${{Postgres.DATABASE_URL}}` (private address; pre-deploy has the service's network)                                             |
+| `BETTER_AUTH_SECRET`  | `openssl rand -base64 32`                                                                                                        |
+| `BETTER_AUTH_URL`     | The public `https://` URL, e.g. the Railway domain now, `https://analytics.openwaters.digital` later. Links and redirects use it |
+| `RESEND_API_KEY`      | Required in production                                                                                                           |
+| `AUTH_EMAIL_FROM`     | `Open Waters Analytics <analytics@openwaters.digital>`                                                                           |
+| `AUTH_ALLOWED_EMAILS` | Comma-separated partner addresses                                                                                                |
+
+The migration step reads only `DATABASE_URL`. The web server refuses to serve
+authenticated pages until the rest are valid.
 
 **Verified locally (17 September 2026)** with a throwaway migration: the image
 built with no `DATABASE_URL`; `node dist/migrate.mjs` from the image created the
@@ -349,9 +376,13 @@ Not yet verified on Railway itself.
 
 ## Before first deploy 🧱
 
-- 🧱 **Auth live** (`add-magic-link-auth`) before any client data is entered or
-  the custom domain is attached. Deploying the bootstrap to a Railway subdomain
-  is harmless: it holds no data and no secrets.
+- ✅ **Auth live** (`add-magic-link-auth`). Still to do on Railway: set the auth
+  variables above, sign in on the real URL, sign out, and confirm the old cookie
+  is rejected.
+- 🧱 **Client IP header on Railway.** After the first sign-in, check the logs for
+  Better Auth's "could not determine a client IP" warning. If it appears, the
+  rate limit is shared by every visitor; set `trustedProxies` or the right
+  header in `src/server/auth-config.ts`.
 - 🧱 **Resend sending domain verified** for `openwaters.digital` (SPF, DKIM,
   DMARC), or magic links land in spam and nobody can sign in.
 - 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored** in Railway and in the

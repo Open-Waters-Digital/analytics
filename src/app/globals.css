@@ -17,7 +17,6 @@
 
   body {
     @apply bg-surface font-sans text-body text-ink antialiased;
-    font-feature-settings: "tnum" 1; /* aligned digits: this app is mostly numbers */
   }
 
   ::selection {

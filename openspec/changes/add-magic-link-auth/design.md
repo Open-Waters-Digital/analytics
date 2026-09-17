@@ -115,19 +115,33 @@ fallback cannot be reached in production.
 
 ### Rate limiting
 
-Better Auth's built-in limiter with a custom rule for the magic link endpoint:
-5 requests per 10 minutes. Storage in the database, not memory, so it survives
-a restart and would still hold with a second replica. Railway sits behind a
-proxy, so the client IP is read from `x-forwarded-for` via Better Auth's
-`advanced.ipAddress.ipAddressHeaders`.
+Better Auth's built-in limiter, configured through the magic link plugin's own
+`rateLimit` option: 5 requests per 10 minutes, covering both the link request
+and link verification. Storage in the database, not memory, so it survives a
+restart and would still hold with a second replica. Enabled in every environment
+(Better Auth's default is production only) so it can be tested locally.
+
+Railway sits behind a proxy. The client IP is read from `x-real-ip` first, then
+`x-forwarded-for`, via `advanced.ipAddress.ipAddressHeaders`. Better Auth only
+trusts a forwarded header holding a single address unless `trustedProxies` is
+set; if Railway's header turns out to carry a chain, requests fall into one
+shared bucket and Better Auth logs a warning. Checking the production logs for
+that warning is a first-deploy task.
+
+**Implementation note.** Better Auth applies the rate limit in its HTTP router,
+not in `auth.api.*` calls. A server action calling `auth.api.signInMagicLink`
+directly would skip the limit, so the action instead builds a request and passes
+it to `getAuth().handler()` with the visitor's IP headers and the app's origin
+(`src/server/sign-in.ts`). The server action is still the form's target, so the
+form works without JavaScript.
 
 ### Screens
 
 - `/sign-in`: one `Field` (email), one `Button`, and an inline message area for
-  expired links and rate limiting. Submits through a server action that calls
-  `auth.api.signInMagicLink`. Single centred column at every width; no client
-  component needed beyond the form's pending state, which uses
-  `useFormStatus` in a small client `SubmitButton`.
+  expired links and rate limiting. Submits through a server action (see the
+  implementation note under Rate limiting). Single centred column at every
+  width. The form is a small client component using `useActionState`, for the
+  pending state and to keep the entered address when a field error comes back.
 - `/sign-in/check-email`: static confirmation, with a link back to try again.
 - App shell: `src/app/(app)/layout.tsx` calls `requirePageSession`, renders a
   header (app name, Clients link placeholder, Design system link, signed-in
@@ -148,6 +162,25 @@ proxy, so the client IP is read from `x-forwarded-for` via Better Auth's
 | `RESEND_API_KEY`      | Required in production, optional in development |
 | `AUTH_EMAIL_FROM`     | Required                                        |
 | `AUTH_ALLOWED_EMAILS` | Required, at least one valid address            |
+
+### Implementation notes: the build never reads secrets
+
+Found while applying, recorded so the pattern is kept:
+
+- The Better Auth configuration is a factory, `createAuth(config, db)`, in
+  `src/server/auth-config.ts` with no import-time side effects.
+  `src/server/auth.ts` creates the instance on first use (`getAuth()`), and the
+  route handler calls it per request. An import-time instance would read the
+  environment during `next build`.
+- The migration script and the database client read only `DATABASE_URL`
+  (`databaseEnv()`), so the Railway pre-deploy step never fails because an auth
+  secret is unset.
+- The schema generator (`pnpm auth:schema`) builds the same factory from
+  placeholders in `scripts/auth-schema.config.ts`, so the generated tables match
+  the running configuration.
+- The access decisions are pure and separately tested:
+  `resolveSession` (`src/server/session-policy.ts`) and the proxy's `decide`
+  (`src/lib/proxy-policy.ts`).
 
 ## Risks / Trade-offs
 
