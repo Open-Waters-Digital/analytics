@@ -88,11 +88,24 @@ client's visitor-level data is stored.
 
 ### Client registry
 
-- 🟡 **Clients, sites and connections** (proposed: `add-client-registry`).
-  Clients, sites, PostHog connections with keys encrypted at rest, Search
-  Console properties, expected events, commercial context and the learning log.
-  Screens: clients list, client detail, add client. Saving a PostHog connection
-  runs a live check.
+- ✅ **Clients, sites and connections** (`add-client-registry`, specs
+  `client-registry` and `data-connections`). Clients (slug fixed at creation,
+  never hard deleted), sites, report recipients, expected events, commercial
+  context and the learning log, all on `/clients` and `/clients/[slug]`.
+  - **PostHog connections** are stored only after a live query check passes.
+    Keys are AES-256-GCM encrypted with the connection id as associated data
+    (`src/server/crypto.ts`); the UI shows the last four characters. A blank key
+    when replacing reuses the stored one.
+  - **Search Console properties** are stored and shown as "Not checked" until
+    the Search Console pull adds a check.
+  - **Expected events** default to the whole event list for the site's version.
+    Changing a site's version does not change them: adopting a new version is a
+    deliberate step. The list mirrors the `openwaters-analytics` skill in
+    `src/lib/event-list.ts`, pinned by a test.
+  - Every registry function lives in `src/server/registry/`, checks the session
+    first and returns field errors as values. Forms are all
+    `src/components/registry/registry-form.tsx` driven by field lists in
+    `src/app/(app)/clients/fields.ts`.
 
 ### Data pulls
 
@@ -119,7 +132,7 @@ Locked. Revisit only if a dependency changes.
 1. ✅ Bootstrap: toolchain, tokens, primitives, showcase, database plumbing,
    container, CI, OpenSpec.
 2. ✅ `add-magic-link-auth`.
-3. 🟡 `add-client-registry`. Includes the PostHog connection check.
+3. ✅ `add-client-registry`. Still to do: connect a real PostHog project (task 6.5).
 4. 🟡 First deploy to `analytics.openwaters.digital`, after the 🧱 list.
 5. 🟡 Nightly PostHog snapshot, with the Railway cron service.
 6. 🟡 Drift check.
@@ -145,13 +158,15 @@ Locked. Revisit only if a dependency changes.
 │   │   └── api/           auth/[...all] (Better Auth), health/ (liveness)
 │   ├── components/
 │   │   ├── ui/            Primitives. variants.ts holds every style recipe
+│   │   ├── registry/      RegistryForm: the one form component for registry screens
 │   │   └── showcase/      Section / Row / Entry for /design-system
 │   ├── db/                Drizzle schema and client. auth-schema.ts is generated
-│   ├── server/            Data access layer, env, auth, session gate. Server only
+│   ├── server/            Env, auth, session gate, crypto, PostHog check. Server only
+│   │   └── registry/      Data access layer for the registry: session check, validation, writes
 │   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
 │   ├── lib/               Framework-free helpers safe for any module
-│   └── test/              Test-only stubs
+│   └── test/              Test database setup (global-setup.ts) and session stand-in
 ├── scripts/               Node entry points bundled to dist/ (migrate, later jobs)
 ├── drizzle/               Generated migrations. Reviewed, committed, never edited
 ├── compose.yaml           Local Postgres on port 5433
@@ -281,7 +296,8 @@ outside Next, so `scripts/build-scripts.mjs` bundles each into a self-contained
 
 ## Definition of done
 
-1. `pnpm run ci:quality` passes, and the real output is reported.
+1. `pnpm run ci:quality` passes, and the real output is reported. Its tests need
+   Postgres: run `pnpm db:up` first locally.
 2. New boundaries are exercised against a running build: signed-out request
    rejected, invalid input returns field errors.
 3. New screens checked at 375px before wider.
@@ -383,14 +399,15 @@ and no lockfile. The migration script is bundled with its dependencies into
 
 **Railway service variables** (every one is documented in `.env.example`):
 
-| Variable              | Value on Railway                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`        | `${{Postgres.DATABASE_URL}}` (private address; pre-deploy has the service's network)                                             |
-| `BETTER_AUTH_SECRET`  | `openssl rand -base64 32`                                                                                                        |
-| `BETTER_AUTH_URL`     | The public `https://` URL, e.g. the Railway domain now, `https://analytics.openwaters.digital` later. Links and redirects use it |
-| `RESEND_API_KEY`      | Required in production                                                                                                           |
-| `AUTH_EMAIL_FROM`     | `Open Waters Analytics <noreply@analytics.openwaters.digital>`                                                                   |
-| `AUTH_ALLOWED_EMAILS` | Comma-separated partner addresses                                                                                                |
+| Variable                     | Value on Railway                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`               | `${{Postgres.DATABASE_URL}}` (private address; pre-deploy has the service's network)                                             |
+| `BETTER_AUTH_SECRET`         | `openssl rand -base64 32`                                                                                                        |
+| `BETTER_AUTH_URL`            | The public `https://` URL, e.g. the Railway domain now, `https://analytics.openwaters.digital` later. Links and redirects use it |
+| `RESEND_API_KEY`             | Required in production                                                                                                           |
+| `AUTH_EMAIL_FROM`            | `Open Waters Analytics <noreply@analytics.openwaters.digital>`                                                                   |
+| `CREDENTIALS_ENCRYPTION_KEY` | `openssl rand -base64 32`. Keep a copy in the password manager                                                                   |
+| `AUTH_ALLOWED_EMAILS`        | Comma-separated partner addresses                                                                                                |
 
 The migration step reads only `DATABASE_URL`. The web server refuses to serve
 authenticated pages until the rest are valid.
@@ -417,9 +434,12 @@ ran before the container started.
   header in `src/server/auth-config.ts`.
 - 🧱 **Resend sending domain verified** for `analytics.openwaters.digital` (SPF, DKIM,
   DMARC), or magic links land in spam and nobody can sign in.
-- 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored** in Railway and in the
-  Open Waters password manager. Losing it makes every stored client key
-  unreadable.
+- 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored**
+  (`openssl rand -base64 32`) as a Railway variable and in the Open Waters
+  password manager. It is already listed with `preserve()` in
+  `.railway/railway.ts`. Until it is set, the app runs but PostHog connections
+  report that they are unavailable. Losing it makes every stored client key
+  unreadable; they would need entering again.
 - 🧱 **Postgres backups** confirmed on the Railway plan in use.
 - 🧱 **Content-Security-Policy** added once the pages and their script needs are
   known.

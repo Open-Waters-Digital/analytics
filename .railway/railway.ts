@@ -43,6 +43,7 @@ export default defineRailway(() => {
       RESEND_API_KEY: preserve(),
       AUTH_EMAIL_FROM: preserve(),
       AUTH_ALLOWED_EMAILS: preserve(),
+      CREDENTIALS_ENCRYPTION_KEY: preserve(),
     },
   });
 

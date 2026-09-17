@@ -72,3 +72,37 @@ export function inputClasses(options: { invalid?: boolean; className?: string } 
     options.className,
   );
 }
+
+export function textareaClasses(options: { invalid?: boolean; className?: string } = {}): string {
+  return cn(
+    "min-h-24 w-full rounded-md border bg-surface-raised px-3 py-2 text-body text-ink placeholder:text-ink-muted disabled:bg-surface-sunken disabled:text-ink-subtle",
+    options.invalid ? "border-danger" : "border-border",
+    options.className,
+  );
+}
+
+export function selectClasses(options: { invalid?: boolean; className?: string } = {}): string {
+  return cn(
+    "h-(--control-height) w-full rounded-md border bg-surface-raised px-3 text-body text-ink disabled:bg-surface-sunken disabled:text-ink-subtle",
+    options.invalid ? "border-danger" : "border-border",
+    options.className,
+  );
+}
+
+export function checkboxClasses(className?: string): string {
+  // accent-ink keeps the native control (and its keyboard behaviour) on-brand.
+  return cn("size-5 shrink-0 rounded-sm accent-ink disabled:opacity-50", className);
+}
+
+export type AlertTone = "info" | "success" | "warning" | "danger";
+
+const alertTones: Record<AlertTone, string> = {
+  info: "bg-info-subtle text-info",
+  success: "bg-success-subtle text-success",
+  warning: "bg-warning-subtle text-warning",
+  danger: "bg-danger-subtle text-danger",
+};
+
+export function alertClasses(tone: AlertTone, className?: string): string {
+  return cn("rounded-md px-3 py-2 text-caption", alertTones[tone], className);
+}

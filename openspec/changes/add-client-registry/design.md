@@ -160,6 +160,29 @@ colour is never the only signal. `DescriptionList` renders term and value pairs
 in one column at 375px and two columns from `md:`. All go into `variants.ts` and
 onto `/design-system` with every state.
 
+### Implementation notes
+
+Decisions made while applying, recorded so they are kept:
+
+- **The master key is not in `env()`.** `credentialsKey()` in
+  `src/server/env.ts` validates `CREDENTIALS_ENCRYPTION_KEY` where keys are
+  encrypted or decrypted. In `env()` it would make every page fail on the first
+  deploy of this change, before anyone has set the variable; this way only the
+  connection forms report that connections are unavailable.
+- **One form component.** `src/components/registry/registry-form.tsx` renders a
+  serialisable field list and runs a server action with `useActionState`, so
+  every registry form shares error display, kept values and the pending state.
+  Submitted API keys are stripped from the state sent back to the browser.
+- **Integration tests use a real database.** `src/test/global-setup.ts`
+  recreates and migrates `analytics_test` on the same Postgres server as
+  `DATABASE_URL` before each run; `src/test/mock-session.ts` stands in for the
+  session. `pnpm test` therefore needs `pnpm db:up` locally, and CI's Postgres
+  service provides it there.
+- **Action errors log names only.** Drizzle's query errors include parameters,
+  which can hold email addresses or ciphertext.
+- **Blank key on replace reuses the stored key**, so a region or project ID
+  correction does not require pasting the key again. The check still runs first.
+
 ## Risks / Trade-offs
 
 - [`CREDENTIALS_ENCRYPTION_KEY` lost] → every stored key must be re-entered;

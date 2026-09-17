@@ -3,17 +3,14 @@ import { cn } from "@/lib/cn";
 
 /**
  * Tables scroll horizontally inside their own wrapper on small screens rather
- * than collapsing into cards: this data is compared across columns. Digits are
- * tabular so figures line up down a column; applied here rather than on the body
- * because tabular figures also widen hyphens in running text.
+ * than collapsing into cards: this data is compared across columns. Add
+ * `tabular-nums` to numeric cells so figures line up; not to the whole table,
+ * because tabular figures also widen hyphens in text.
  */
 export function Table({ className, ...props }: ComponentProps<"table">) {
   return (
     <div className="overflow-x-auto">
-      <table
-        className={cn("w-full border-collapse text-left text-data tabular-nums", className)}
-        {...props}
-      />
+      <table className={cn("w-full border-collapse text-left text-data", className)} {...props} />
     </div>
   );
 }

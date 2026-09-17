@@ -70,6 +70,41 @@ export function databaseEnv(): DatabaseEnv {
   return cachedDatabase;
 }
 
+export class MissingConfigurationError extends Error {
+  override name = "MissingConfigurationError";
+}
+
+const credentialsKeySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, "must be base64")
+  .transform(value => Buffer.from(value, "base64"))
+  .refine(key => key.length === 32, "must decode to exactly 32 bytes");
+
+let cachedCredentialsKey: Buffer | undefined;
+
+/**
+ * The master key for client API keys. Validated only where keys are encrypted
+ * or decrypted, not in env(): a missing key should disable connections, not
+ * take the whole app down on the deploy that introduces it.
+ */
+export function credentialsKey(): Buffer {
+  cachedCredentialsKey ??= parseCredentialsKey(process.env["CREDENTIALS_ENCRYPTION_KEY"]);
+  return cachedCredentialsKey;
+}
+
+export function parseCredentialsKey(value: string | undefined): Buffer {
+  if (!value) {
+    throw new MissingConfigurationError("CREDENTIALS_ENCRYPTION_KEY is not set");
+  }
+  const result = credentialsKeySchema.safeParse(value);
+  if (!result.success) {
+    throw new MissingConfigurationError(
+      "Invalid environment variables: CREDENTIALS_ENCRYPTION_KEY",
+    );
+  }
+  return result.data;
+}
+
 export function parseEnv(source: Record<string, string | undefined>): Env {
   return parseWith(schema, source);
 }

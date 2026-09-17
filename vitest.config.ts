@@ -1,5 +1,14 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { testDatabaseUrls } from "./src/test/database-urls";
+
+/**
+ * Integration tests run against a dedicated `analytics_test` database on the
+ * same Postgres server as DATABASE_URL (compose locally, the service container
+ * in CI). src/test/global-setup.ts recreates and migrates it before every run,
+ * so local data is never touched. Needs `pnpm db:up` locally.
+ */
+const urls = testDatabaseUrls(process.env);
 
 export default defineConfig({
   resolve: {
@@ -13,5 +22,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.ts"],
+    globalSetup: ["./src/test/global-setup.ts"],
+    env: { DATABASE_URL: urls.test },
   },
 });

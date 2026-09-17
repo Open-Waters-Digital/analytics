@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
+import { Alert } from "@/components/ui/alert";
 import { Badge, StatusDot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DescriptionList } from "@/components/ui/description-list";
 import { Field } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { Table, Td, Th, Tr } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import type { Tone } from "@/components/ui/variants";
 import { Entry, Row, Section } from "@/components/showcase/showcase";
 
@@ -42,6 +47,21 @@ const typeScale = [
 ];
 
 const tones: Tone[] = ["neutral", "success", "warning", "danger", "info"];
+
+const frameworkOptions = [
+  { value: "astro", label: "Astro" },
+  { value: "next", label: "Next.js" },
+  { value: "other", label: "Other" },
+];
+const currencyOptions = [
+  { value: "GBP", label: "GBP (£)" },
+  { value: "EUR", label: "EUR (€)" },
+  { value: "USD", label: "USD ($)" },
+];
+const regionOptions = [
+  { value: "eu", label: "EU" },
+  { value: "us", label: "US" },
+];
 
 export default function DesignSystemPage() {
   return (
@@ -140,6 +160,88 @@ export default function DesignSystemPage() {
             <Field label="Region" disabled defaultValue="eu" />
           </Entry>
         </Row>
+      </Section>
+
+      <Section title="Select" importPath="@/components/ui/select">
+        <Row label="State">
+          <Entry code="default">
+            <Select label="Framework" options={frameworkOptions} defaultValue="astro" />
+          </Entry>
+          <Entry code="placeholder + hint">
+            <Select
+              label="Currency"
+              placeholder="Choose…"
+              options={currencyOptions}
+              hint="Required with a lead value"
+              defaultValue=""
+            />
+          </Entry>
+          <Entry code="error">
+            <Select label="Region" options={regionOptions} error="Choose a region." />
+          </Entry>
+          <Entry code="disabled">
+            <Select label="Region" options={regionOptions} disabled defaultValue="eu" />
+          </Entry>
+        </Row>
+      </Section>
+
+      <Section title="Textarea" importPath="@/components/ui/textarea">
+        <Row label="State">
+          <Entry code="default">
+            <Textarea label="Detail" placeholder="What changed, and why" />
+          </Entry>
+          <Entry code="hint">
+            <Textarea label="Expected effect" hint="What should move if this works" />
+          </Entry>
+          <Entry code="error">
+            <Textarea label="Detail" error="Keep the detail to 2000 characters or fewer." />
+          </Entry>
+          <Entry code="disabled">
+            <Textarea label="Detail" disabled defaultValue="Read only" />
+          </Entry>
+        </Row>
+      </Section>
+
+      <Section title="Checkbox" importPath="@/components/ui/checkbox">
+        <Row label="State">
+          <Entry code="unchecked">
+            <Checkbox label="Regulated" />
+          </Entry>
+          <Entry code="checked + hint">
+            <Checkbox label="file_downloaded" hint="Intent" defaultChecked />
+          </Entry>
+          <Entry code="disabled">
+            <Checkbox label="deal_won" disabled />
+          </Entry>
+        </Row>
+      </Section>
+
+      <Section title="Alert" importPath="@/components/ui/alert">
+        <Row label="Tone">
+          <Entry code='tone="info"'>
+            <Alert tone="info">Search Console is not checked yet.</Alert>
+          </Entry>
+          <Entry code='tone="success"'>
+            <Alert tone="success">Connected to PostHog.</Alert>
+          </Entry>
+          <Entry code='tone="warning"'>
+            <Alert tone="warning">No PostHog connection.</Alert>
+          </Entry>
+          <Entry code='tone="danger"'>
+            <Alert tone="danger">PostHog could not be reached. Try again in a minute.</Alert>
+          </Entry>
+        </Row>
+      </Section>
+
+      <Section title="DescriptionList" importPath="@/components/ui/description-list">
+        <DescriptionList
+          items={[
+            { term: "Production URL", value: "https://radarahealth.com" },
+            { term: "Framework", value: "Astro" },
+            { term: "Event list", value: "Version 1" },
+            { term: "PostHog", value: <StatusDot tone="success" label="Connected" /> },
+          ]}
+        />
       </Section>
 
       <Section title="Panel" importPath="@/components/ui/panel">

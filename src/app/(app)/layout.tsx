@@ -15,11 +15,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <div className="min-h-dvh">
       <header className="border-b border-hairline bg-surface-raised">
         <div className="mx-auto flex max-w-(--container-max) flex-wrap items-center gap-x-6 gap-y-2 px-(--gutter) py-3">
-          <Link href="/" className="font-medium">
+          <Link href="/clients" className="font-medium">
             Open Waters Analytics
           </Link>
           <nav aria-label="Main" className="flex flex-wrap items-center gap-4 text-data">
-            <Link href="/" className="text-ink-muted hover:text-ink">
+            <Link href="/clients" className="text-ink-muted hover:text-ink">
               Clients
             </Link>
             <Link href="/design-system" className="text-ink-muted hover:text-ink">
