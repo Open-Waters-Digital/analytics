@@ -360,7 +360,7 @@ and no lockfile. The migration script is bundled with its dependencies into
 | `BETTER_AUTH_SECRET`  | `openssl rand -base64 32`                                                                                                        |
 | `BETTER_AUTH_URL`     | The public `https://` URL, e.g. the Railway domain now, `https://analytics.openwaters.digital` later. Links and redirects use it |
 | `RESEND_API_KEY`      | Required in production                                                                                                           |
-| `AUTH_EMAIL_FROM`     | `Open Waters Analytics <analytics@openwaters.digital>`                                                                           |
+| `AUTH_EMAIL_FROM`     | `Open Waters Analytics <noreply@analytics.openwaters.digital>`                                                                   |
 | `AUTH_ALLOWED_EMAILS` | Comma-separated partner addresses                                                                                                |
 
 The migration step reads only `DATABASE_URL`. The web server refuses to serve
@@ -383,7 +383,7 @@ Not yet verified on Railway itself.
   Better Auth's "could not determine a client IP" warning. If it appears, the
   rate limit is shared by every visitor; set `trustedProxies` or the right
   header in `src/server/auth-config.ts`.
-- 🧱 **Resend sending domain verified** for `openwaters.digital` (SPF, DKIM,
+- 🧱 **Resend sending domain verified** for `analytics.openwaters.digital` (SPF, DKIM,
   DMARC), or magic links land in spam and nobody can sign in.
 - 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored** in Railway and in the
   Open Waters password manager. Losing it makes every stored client key

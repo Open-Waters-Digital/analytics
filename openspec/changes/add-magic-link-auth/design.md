@@ -106,7 +106,7 @@ function, unit tested with the usual open-redirect payloads.
 with the error code only, and the user still sees "check your email" (a failed
 send is indistinguishable from a non-allowlisted address, which is acceptable
 for two users and avoids an enumeration signal). The sender is
-`AUTH_EMAIL_FROM`, e.g. `Open Waters Analytics <analytics@openwaters.digital>`.
+`AUTH_EMAIL_FROM`, e.g. `Open Waters Analytics <noreply@analytics.openwaters.digital>`.
 
 In development only (`NODE_ENV !== "production"`) and only when
 `RESEND_API_KEY` is unset, the link is printed with `console.info` instead.
