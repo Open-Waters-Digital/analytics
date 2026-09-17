@@ -1,0 +1,4 @@
+# Internal tool. Nothing here is for search engines; every response also sends
+# X-Robots-Tag: noindex (next.config.ts).
+User-agent: *
+Disallow: /
