@@ -298,9 +298,60 @@ contents, IP addresses of client-site visitors.
 
 ---
 
+## Deploy
+
+Railway builds from the GitHub repository using `railway.json`. The order on
+every deploy is **build → pre-deploy → start → health check → traffic switch**.
+
+| Step         | What runs                                                                                                                            | Where it is configured                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| Build        | The `Dockerfile`. **No database access.**                                                                                            | `railway.json` → `build`                   |
+| Pre-deploy   | `node dist/migrate.mjs`: applies pending Drizzle migrations. A non-zero exit stops the deploy and the previous version keeps serving | `railway.json` → `deploy.preDeployCommand` |
+| Start        | `node server.js` (Next standalone server)                                                                                            | `railway.json` → `deploy.startCommand`     |
+| Health check | `GET /api/health` must return 200 within 60 seconds                                                                                  | `railway.json` → `deploy.healthcheckPath`  |
+
+**The build must never need the database.** This is the rule that keeps
+migrations simple here, unlike luxury-gardens, where Payload prerenders pages
+from the CMS so `next build` reads Postgres and migrations have to run inside
+the build too. Railway runs the pre-deploy step _after_ the build, and its
+private network does not exist during a build. So:
+
+- The database connection is created on first use (`getDb()`), never at import.
+  `src/db/client.test.ts` fails if importing it needs `DATABASE_URL`.
+- Pages that read data are dynamic: they check the session, which reads request
+  headers, so Next never prerenders them. Do not add `generateStaticParams` or
+  build-time data fetching to a page that reads the database.
+- CI's Docker job builds the image with no `DATABASE_URL`, so a change that makes
+  the build touch the database fails there first.
+
+**Migrations run before the new code serves traffic, while the old container is
+still serving.** Every migration must work with the previous release's code:
+add columns and tables freely; rename or drop only in two releases (expand, then
+contract). See [Schema and data-layer conventions](#schema-and-data-layer-conventions).
+
+**Pre-deploy calls `node` directly, not `pnpm`.** The runtime image has no pnpm
+and no lockfile. The migration script is bundled with its dependencies into
+`dist/migrate.mjs`, and the SQL files are copied to `/app/drizzle`.
+
+**Railway service variables:** `DATABASE_URL` as a reference to the Postgres
+service (`${{Postgres.DATABASE_URL}}`, the private address). The pre-deploy
+step runs with the service's variables and network, so the private address
+works there. Later changes add their own variables to `.env.example` and to the
+first-deploy list below.
+
+**Verified locally (17 September 2026)** with a throwaway migration: the image
+built with no `DATABASE_URL`; `node dist/migrate.mjs` from the image created the
+table on a fresh database; a second run was a no-op; wrong credentials exited 1
+with `migrate: failed`; the server then started and `/api/health` returned 200.
+Not yet verified on Railway itself.
+
+---
+
 ## Before first deploy 🧱
 
-- 🧱 **Auth live** (`add-magic-link-auth`): nothing public before it.
+- 🧱 **Auth live** (`add-magic-link-auth`) before any client data is entered or
+  the custom domain is attached. Deploying the bootstrap to a Railway subdomain
+  is harmless: it holds no data and no secrets.
 - 🧱 **Resend sending domain verified** for `openwaters.digital` (SPF, DKIM,
   DMARC), or magic links land in spam and nobody can sign in.
 - 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored** in Railway and in the
@@ -316,9 +367,6 @@ contents, IP addresses of client-site visitors.
 
 ## Open questions
 
-- 🧪 **Environment template name.** It is `env.example` because the agent's write
-  permissions block `.env*` paths. The bootstrap convention is `.env.example`;
-  rename it by hand (`git mv env.example .env.example`) and update the README.
 - 🧪 **Error tracking vendor.** PostHog error tracking in an Open Waters
   organisation is the lean; confirm once the Open Waters PostHog organisation
   exists.

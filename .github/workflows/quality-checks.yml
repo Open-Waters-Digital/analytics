@@ -86,7 +86,9 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # The image Railway will build, so a Dockerfile regression fails here
-      # rather than on deploy. Not pushed anywhere.
+      # rather than on deploy. Not pushed anywhere. Deliberately built with no
+      # DATABASE_URL: the build must never need a database, because Railway
+      # migrates after building (see AGENTS.md -> Deploy).
       - name: Build image
         uses: docker/build-push-action@v6
         with:

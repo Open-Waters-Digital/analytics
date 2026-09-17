@@ -8,7 +8,7 @@
 
 ## 2. Encryption
 
-- [ ] 2.1 Add `CREDENTIALS_ENCRYPTION_KEY` to `env()` (base64, exactly 32 bytes) and to `env.example`; verify tests for missing, wrong-length and non-base64 values
+- [ ] 2.1 Add `CREDENTIALS_ENCRYPTION_KEY` to `env()` (base64, exactly 32 bytes) and to `.env.example`; verify tests for missing, wrong-length and non-base64 values
 - [ ] 2.2 Implement `encryptApiKey(key, connectionId)` and `decryptApiKey(stored, connectionId)` with AES-256-GCM and the connection id as associated data; verify tests for round trip, wrong connection id, tampered ciphertext, tampered tag and wrong master key (all return `{ ok: false }`)
 
 ## 3. PostHog check

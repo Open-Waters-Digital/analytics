@@ -46,7 +46,7 @@ None. No specs exist yet.
   plus migration. No existing data.
 - **Environment:** `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `RESEND_API_KEY`,
   `AUTH_EMAIL_FROM`, `AUTH_ALLOWED_EMAILS`. All server-only, validated in
-  `src/server/env.ts`, documented in `env.example`.
+  `src/server/env.ts`, documented in `.env.example`.
 - **Routes:** `/sign-in`, `/sign-in/check-email`, `/api/auth/[...all]`;
   every other route becomes protected.
 - **UI:** new app shell layout. No new primitives or tokens; the sign-in form

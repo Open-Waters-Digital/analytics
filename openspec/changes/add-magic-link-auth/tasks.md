@@ -4,7 +4,7 @@
 
 - [ ] 1.1 Add `better-auth` and `resend` at exact versions; verify `pnpm install --frozen-lockfile` succeeds from the committed lockfile
 - [ ] 1.2 Extend `src/server/env.ts` with the five auth variables and the production-only rule for `RESEND_API_KEY`; parse `AUTH_ALLOWED_EMAILS` into a lower-cased `Set`; verify with unit tests for missing, malformed and production-mode cases
-- [ ] 1.3 Add the variables with placeholders and one-line explanations to `env.example`; verify every variable `env()` reads is listed
+- [ ] 1.3 Add the variables with placeholders and one-line explanations to `.env.example`; verify every variable `env()` reads is listed
 - [ ] 1.4 Create `src/server/auth.ts` (magic link plugin, Drizzle adapter, `nextCookies`, 15-minute hashed tokens, 30-day rolling sessions, database-backed rate limit rule, forwarded-IP header); verify typecheck passes
 - [ ] 1.5 Generate the Better Auth schema into `src/db/auth-schema.ts`, re-export it from `src/db/schema.ts`, run `pnpm db:generate`, read the SQL and commit it; verify `node dist/migrate.mjs` applies it to a fresh local database
 
