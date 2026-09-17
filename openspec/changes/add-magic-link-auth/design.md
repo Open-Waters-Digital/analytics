@@ -144,10 +144,11 @@ form works without JavaScript.
   pending state and to keep the entered address when a field error comes back.
 - `/sign-in/check-email`: static confirmation, with a link back to try again.
 - App shell: `src/app/(app)/layout.tsx` calls `requirePageSession`, renders a
-  header (app name, Clients link placeholder, Design system link, signed-in
-  address, Sign out). Sign out is a server action. At 375px the navigation
-  collapses under the app name as a wrapped row; there are only three items, so
-  no menu toggle.
+  header (app name, Clients link, signed-in address, Sign out). Sign out is a
+  server action. At 375px the navigation wraps under the app name; there are
+  only a few items, so no menu toggle. `/design-system` is protected like every
+  other page but not linked from the header: it is a tool for building
+  components, reached by URL.
 - Routes move into the `(app)` group so the layout protects them all:
   `/`, `/design-system`.
 

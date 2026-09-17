@@ -19,11 +19,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             Open Waters Analytics
           </Link>
           <nav aria-label="Main" className="flex flex-wrap items-center gap-4 text-data">
+            {/* /design-system is deliberately not linked: it is a tool for
+                building components, reached by URL, not part of the product. */}
             <Link href="/clients" className="text-ink-muted hover:text-ink">
               Clients
-            </Link>
-            <Link href="/design-system" className="text-ink-muted hover:text-ink">
-              Design system
             </Link>
           </nav>
           <div className="flex items-center gap-3 md:ml-auto">
