@@ -1,0 +1,9 @@
+.next
+dist
+drizzle
+node_modules
+pnpm-lock.yaml
+openspec/changes/archive
+.claude
+.agents
+local-files

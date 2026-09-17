@@ -1,0 +1,110 @@
+/*
+ * Design tokens: the only place a visual value is defined.
+ *
+ * The brand values (monochrome neutrals, near-black ink as the one action
+ * accent, Inter) are copied exactly from the Open Waters marketing site
+ * (open-waters/src/styles/tokens.css) so the internal app reads as the same
+ * company. Everything below "Application additions" is derived for this app,
+ * because a marketing site has no tables, status states or dense data.
+ *
+ * Contrast, measured against surface-raised (#ffffff):
+ *   ink 19.67:1 · ink-muted 6.91:1 · success 5.32:1 · danger 6.57:1
+ *   warning 5.93:1 · info 6.45:1 · ink-subtle 3.25:1 (fails AA for text:
+ *   disabled states and decorative marks only, never information)
+ * Each semantic colour also clears 4.5:1 on its own *-subtle background.
+ */
+
+@theme {
+  /* ---- Brand: copied from the marketing site ---------------------------- */
+  --color-surface: #f4f5f7;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #ececef;
+
+  --color-ink: #0b0b0c;
+  --color-ink-muted: #565a63;
+  --color-ink-subtle: #8a8f99;
+  --color-ink-inverse: #f7f8fa;
+
+  --color-hairline: #d9dce1;
+  --color-border: #c7cbd2;
+
+  --color-success: #1f7a4d;
+  --color-danger: #b42318;
+  --color-focus: #0b0b0c;
+
+  --font-sans:
+    "Inter Variable", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-none: 0;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-full: 9999px;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+
+  /* ---- Application additions -------------------------------------------- */
+
+  /* Status. The marketing site only needed success and danger; an app also
+     has warnings (a stale sync) and neutral information (a check running).
+     Hues chosen to sit beside the brand's success green and danger red at
+     similar weight. */
+  --color-warning: #8a5a00;
+  --color-info: #1d5fa8;
+  --color-success-subtle: #e7f3ec;
+  --color-danger-subtle: #fbeae8;
+  --color-warning-subtle: #fbf1dc;
+  --color-info-subtle: #e8f0fa;
+
+  /* Interaction. Hover darkens the raised surface towards sunken rather than
+     introducing a tint, keeping the palette monochrome. */
+  --color-surface-hover: #f0f1f4;
+  --color-ink-hover: #2a2b2f;
+  --color-selection: #dfe3ea;
+
+  /* Type scale. The marketing site's scale starts at 17px body copy for
+     reading; an operational screen needs denser steps below that. */
+  --text-display: 2rem;
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 500;
+
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 500;
+
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5;
+
+  --text-data: 0.875rem;
+  --text-data--line-height: 1.4;
+
+  --text-label: 0.75rem;
+  --text-label--line-height: 1.2;
+  --text-label--letter-spacing: 0.06em;
+  --text-label--font-weight: 600;
+
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+
+  /* Elevation: one level. Panels are separated by hairlines; only floating
+     layers (menus, dialogs) cast a shadow. */
+  --shadow-float: 0 1px 2px rgb(11 11 12 / 0.06), 0 8px 24px rgb(11 11 12 / 0.08);
+}
+
+:root {
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  /* Layout */
+  --container-max: 80rem;
+  --gutter: clamp(1rem, 4vw, 2rem);
+
+  /* Density: row heights for tables and controls. 44px is the minimum touch
+     target, so compact rows are for pointer-only desktop tables. */
+  --control-height: 2.75rem;
+  --row-height: 2.75rem;
+  --row-height-compact: 2.25rem;
+}

@@ -1,0 +1,65 @@
+schema: spec-driven
+
+context: |
+  Open Waters Analytics: the internal app at analytics.openwaters.digital that
+  holds the client registry, pulls each client's PostHog, Search Console and
+  PageSpeed data nightly, checks tracking for drift, and (later) drafts the
+  monthly client reports. Two users: the Open Waters partners.
+
+  Read /AGENTS.md before proposing or applying anything. It is the source of
+  truth for scope, delivery order, engineering standards and the design system;
+  this file only summarises what OpenSpec needs inline. Vocabulary is defined
+  in /CONTEXT.md; use those terms in specs.
+
+  Stack: Next.js 16 App Router (standalone output), React 19, TypeScript strict
+  with noUncheckedIndexedAccess, Tailwind CSS v4 tokens, Postgres 17 with
+  Drizzle ORM and drizzle-kit migrations, Zod 4, Vitest, pnpm. Deployed as a
+  Docker image on Railway; migrations run as the pre-deploy command. Nightly
+  work runs as a Railway cron service from the same image.
+
+  The shared event list and PostHog conventions come from the
+  openwaters-analytics skill (~/.agents/skills/openwaters-analytics). This app
+  reads that contract; it never redefines event names.
+
+  Conventions:
+  - Server components by default. A client component needs a stated reason.
+  - All UI composes design tokens (src/styles/tokens.css) and primitives in
+    src/components/ui. ESLint rejects literal colours.
+  - Every new or changed primitive appears on /design-system with every
+    variant, size and state, in the same change.
+  - Every mutation and every data read passes the session check in the data
+    access layer (src/server/), never only in a page or proxy.
+  - Client secrets (PostHog keys) are encrypted at rest and never reach the
+    browser or the logs.
+  - British English in all copy.
+
+rules:
+  proposal:
+    - State whether the change adds a table, a secret or an outbound call, and
+      how each is protected.
+    - Name every new design token or UI primitive the change introduces.
+    - State the smallest supported viewport behaviour (375px) for any new screen.
+  design:
+    - Record rejected alternatives with one line each on why.
+    - For any outbound call, state its timeout and what the user sees when it
+      fails.
+  tasks:
+    - Include a task for tests on failure modes, not only the happy path.
+    - Include a task for the /design-system entry whenever a primitive is added
+      or changed.
+    - Include a migration task (pnpm db:generate, reviewed and committed)
+      whenever src/db/schema.ts changes.
+    - End with a task to run `pnpm run ci:quality` and report the real result.
+
+operations:
+  apply:
+    guidance:
+      - Run `pnpm run ci:quality` and report the actual result. Do not mark
+        tasks complete on a failing gate.
+      - Exercise each new boundary for real (unauthenticated request rejected,
+        invalid input returns field errors) against a running build.
+      - Check new screens at 375px wide before anything wider.
+  archive:
+    guidance:
+      - "Sweep /AGENTS.md: flip implementation statuses, update the delivery
+        order and refresh the repo tree. Drift is a bug."

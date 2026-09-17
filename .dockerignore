@@ -1,0 +1,21 @@
+# Everything the build does not need. A tight context keeps builds fast and
+# stops local state or secrets from entering an image layer.
+node_modules
+.next
+dist
+.git
+.github
+.vscode
+.DS_Store
+.claude
+.agents
+openspec
+docs
+local-files
+coverage
+*.log
+*.md
+!README.md
+
+# Local environment files never enter an image; Railway injects variables.
+.env*
