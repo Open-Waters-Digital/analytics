@@ -35,7 +35,7 @@
 - [x] 6.2 Build `/clients/new` and `/clients/[slug]/edit` with field errors kept on failure; verify by submitting invalid data with browser validation disabled
 - [x] 6.3 Build `/clients/[slug]` with sites, recipients and per-site panels; verify the client-owned site shows "Client-owned analytics"
 - [x] 6.4 Build site create/edit pages and the remove-site confirmation page; verify a direct POST without `confirm=yes` removes nothing
-- [ ] 6.5 Build the PostHog connection form (password input, masked last four, Test connection, remove with confirmation); verify against a real PostHog project that a good key connects, a bad key is rejected, and the key never appears in page HTML or action responses
+- [x] 6.5 Build the PostHog connection form (password input, masked last four, Test connection, remove with confirmation); verify against a real PostHog project that a good key connects, a bad key is rejected, and the key never appears in page HTML or action responses
 - [x] 6.6 Build the Search Console, expected events, commercial context and learning log forms; verify each saves and shows its validation errors
 - [x] 6.7 Link Clients in the app header and make `/` redirect to `/clients`; verify navigation by keyboard
 
@@ -82,7 +82,6 @@ Not done:
   function rather than `env()`, so a missing key disables connections instead of
   failing every page on the deploy that introduces it (see design.md). The
   `.env.example` line is left to the user, whose file it is.
-- **6.5** A **working** key has not been tried against a real PostHog project:
-  none exists yet. The request format and the rejection path are verified
-  against the real API; the success path is verified with a stubbed check.
-  Tick after connecting Radara's project for real.
+- **6.5** Done on 17 September 2026: the Open Waters site's real PostHog project
+  was connected through the form with a Query Read key, and the live check
+  passed.
