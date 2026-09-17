@@ -133,7 +133,7 @@ Locked. Revisit only if a dependency changes.
    container, CI, OpenSpec.
 2. ✅ `add-magic-link-auth`.
 3. ✅ `add-client-registry`. Still to do: connect a real PostHog project (task 6.5).
-4. 🟡 First deploy to `analytics.openwaters.digital`, after the 🧱 list.
+4. ✅ Live at `analytics.openwaters.digital` (17 September 2026). Two 🧱 items remain: CSP and error tracking.
 5. 🟡 Nightly PostHog snapshot, with the Railway cron service.
 6. 🟡 Drift check.
 7. 🟡 Search Console and PageSpeed pulls.
@@ -425,26 +425,30 @@ ran before the container started.
 
 ## Before first deploy 🧱
 
-- ✅ **Auth live** (`add-magic-link-auth`). Still to do on Railway: set the auth
-  variables above, sign in on the real URL, sign out, and confirm the old cookie
-  is rejected.
-- 🧱 **Client IP header on Railway.** After the first sign-in, check the logs for
-  Better Auth's "could not determine a client IP" warning. If it appears, the
+- ✅ **Auth live** (`add-magic-link-auth`), with sign-in confirmed on the live
+  URL.
+- ✅ **Client IP header on Railway.** No "could not determine a client IP"
+  warning in the logs after the first live sign-ins. Recheck if Railway's edge
+  changes. If the warning appears, the rate limit is shared by every visitor;
+  set `trustedProxies` or the right header in `src/server/auth-config.ts`.
+  Original check: after the first sign-in, look for Better Auth's warning. If it appears, the
   rate limit is shared by every visitor; set `trustedProxies` or the right
   header in `src/server/auth-config.ts`.
-- 🧱 **Resend sending domain verified** for `analytics.openwaters.digital` (SPF, DKIM,
-  DMARC), or magic links land in spam and nobody can sign in.
-- 🧱 **`CREDENTIALS_ENCRYPTION_KEY` generated and stored**
+- ✅ **Resend sending domain verified** for `analytics.openwaters.digital`.
+  `AUTH_EMAIL_FROM` must use that subdomain: an `@openwaters.digital` sender is
+  rejected with a 403 and no email is sent.
+- ✅ **`CREDENTIALS_ENCRYPTION_KEY` generated and stored**
   (`openssl rand -base64 32`) as a Railway variable and in the Open Waters
   password manager. It is already listed with `preserve()` in
   `.railway/railway.ts`. Until it is set, the app runs but PostHog connections
   report that they are unavailable. Losing it makes every stored client key
   unreadable; they would need entering again.
-- 🧱 **Postgres backups** confirmed on the Railway plan in use.
+- ✅ **Postgres backups** included on the Railway plan in use.
 - 🧱 **Content-Security-Policy** added once the pages and their script needs are
   known.
 - 🧱 **Error tracking** decided and wired (🧪 PostHog error tracking).
-- 🧱 **DNS:** CNAME `analytics` at Porkbun to the Railway domain; confirm HTTPS.
+- ✅ **DNS:** `analytics.openwaters.digital` at Porkbun points to Railway, serves
+  HTTPS, and `BETTER_AUTH_URL` uses it.
 
 ---
 
