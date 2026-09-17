@@ -31,16 +31,18 @@ pnpm run ci:quality        # lint, typecheck, test, format check, build
 
 Railway builds the `Dockerfile`, runs `node dist/migrate.mjs` as the
 pre-deploy command (a failing migration stops the deploy), then starts
-`node server.js` with a health check on `/api/health`. All of it is in
-`railway.json`. The build never needs the database. See AGENTS.md → Deploy.
+`node server.js` with a health check on `/api/health`. Those settings live in
+`.railway/railway.ts` and are applied with the Railway CLI, not by pushing. The
+build never needs the database. See AGENTS.md → Deploy.
 
 ### Setting up the Railway project
 
-1. New project → Deploy from GitHub repo → this repository. Railway picks up
-   `railway.json` automatically.
+1. New project → Deploy from GitHub repo → this repository.
 2. Add a Postgres service to the same project.
-3. On the app service, add the variable `DATABASE_URL` =
-   `${{Postgres.DATABASE_URL}}`.
-4. Deploy. The deploy logs show `migrate: up to date` before the server starts.
-5. Generate a Railway domain to check `/api/health`. Leave the custom domain
-   until sign-in exists.
+3. On the app service, set every variable in `.env.example`, with
+   `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`.
+4. `railway link` to the project, then `railway config plan`. Check it only
+   changes build and deploy settings, then `railway config apply`.
+5. Deploy. The deploy logs show `migrate: applied N` (or `migrate: up to date`)
+   before the server starts.
+6. Generate a Railway domain and check `/api/health`.

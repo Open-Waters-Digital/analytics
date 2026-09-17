@@ -67,7 +67,7 @@ client's visitor-level data is stored.
   Table, all on `/design-system`.
 - ✅ **Database plumbing**: Drizzle client, bundled migration script, local
   Postgres via `compose.yaml`.
-- ✅ **Container and deploy config**: standalone Dockerfile, `railway.json` with
+- ✅ **Container and deploy config**: standalone Dockerfile, `.railway/railway.ts` with
   pre-deploy migrations and a health check.
 
 ### Access
@@ -156,7 +156,7 @@ Locked. Revisit only if a dependency changes.
 ├── drizzle/               Generated migrations. Reviewed, committed, never edited
 ├── compose.yaml           Local Postgres on port 5433
 ├── Dockerfile             Multi-stage, standalone runtime, non-root
-└── railway.json           Pre-deploy migrations, start command, health check
+├── .railway/railway.ts    Railway service config: pre-deploy migrations, health check. Applied by CLI
 ```
 
 ---
@@ -319,15 +319,44 @@ contents, IP addresses of client-site visitors.
 
 ## Deploy
 
-Railway builds from the GitHub repository using `railway.json`. The order on
-every deploy is **build → pre-deploy → start → health check → traffic switch**.
+Railway builds from the GitHub repository. The order on every deploy is
+**build → pre-deploy → start → health check → traffic switch**. The service's
+settings live in `.railway/railway.ts` (Railway Infrastructure as Code).
 
-| Step         | What runs                                                                                                                            | Where it is configured                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| Build        | The `Dockerfile`. **No database access.**                                                                                            | `railway.json` → `build`                   |
-| Pre-deploy   | `node dist/migrate.mjs`: applies pending Drizzle migrations. A non-zero exit stops the deploy and the previous version keeps serving | `railway.json` → `deploy.preDeployCommand` |
-| Start        | `node server.js` (Next standalone server)                                                                                            | `railway.json` → `deploy.startCommand`     |
-| Health check | `GET /api/health` must return 200 within 60 seconds                                                                                  | `railway.json` → `deploy.healthcheckPath`  |
+| Step         | What runs                                                                                                                            | Set in `.railway/railway.ts` |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Build        | The `Dockerfile`. **No database access.**                                                                                            | `build`                      |
+| Pre-deploy   | `node dist/migrate.mjs`: applies pending Drizzle migrations. A non-zero exit stops the deploy and the previous version keeps serving | `preDeploy`                  |
+| Start        | `node server.js` (Next standalone server)                                                                                            | `start`                      |
+| Health check | `GET /api/health` must return 200 within 60 seconds                                                                                  | `healthcheck`                |
+
+**Not `railway.json`.** Railway ignores `railway.json` for services created
+after Config as Code was deprecated, without any warning in the deploy. This
+service was one: its first deploys ran with no migration step and no health
+check, and still reported success. Older services stop reading it on 1 December 2026. See the `railway` skill.
+
+**Changing Railway config is not applied by a push.** After editing
+`.railway/railway.ts`:
+
+1. `railway config plan`: read-only. Read every line. Anything the file does not
+   declare is removed on apply, so a plan that deletes a variable or changes
+   `source` means the file is missing something.
+2. `railway config apply`: changes the live project. Only on a plan with
+   nothing unexpected.
+
+`export const partial = "analytics"` limits the file to what it declares. Without
+it Railway treats the file as the whole project and would delete the Postgres
+service. Every service variable is listed with `preserve()`, which keeps the
+value set in the dashboard; **a variable missing from that list is deleted on
+the next apply**, so add new variables there in the same change as
+`src/server/env.ts` and `.env.example`.
+
+**Check a deploy really migrated:**
+
+```bash
+railway deployment list --json   # meta.serviceManifest.deploy.preDeployCommand must not be null
+railway logs --deployment <id>   # look for "migrate: applied N" or "migrate: up to date"
+```
 
 **The build must never need the database.** This is the rule that keeps
 migrations simple here, unlike luxury-gardens, where Payload prerenders pages
@@ -370,7 +399,8 @@ authenticated pages until the rest are valid.
 built with no `DATABASE_URL`; `node dist/migrate.mjs` from the image created the
 table on a fresh database; a second run was a no-op; wrong credentials exited 1
 with `migrate: failed`; the server then started and `/api/health` returned 200.
-Not yet verified on Railway itself.
+On Railway, the first deploys did not migrate because `railway.json` was ignored
+(see above).
 
 ---
 

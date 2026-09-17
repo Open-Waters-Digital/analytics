@@ -17,9 +17,25 @@ const sql = postgres(databaseEnv().DATABASE_URL, {
   onnotice: () => {},
 });
 
+/** Rows in Drizzle's journal table, or 0 before the first migration creates it. */
+async function appliedCount(): Promise<number> {
+  // Two queries: Postgres resolves every table in a statement before running
+  // it, so a single CASE still fails when the journal table does not exist.
+  const [table] = await sql<{ exists: boolean }[]>`
+    select to_regclass('drizzle.__drizzle_migrations') is not null as exists`;
+  if (!table?.exists) return 0;
+  const [row] = await sql<{ count: number }[]>`
+    select count(*)::int as count from drizzle.__drizzle_migrations`;
+  return row?.count ?? 0;
+}
+
 try {
+  const before = await appliedCount();
   await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });
-  console.info("migrate: up to date");
+  const applied = (await appliedCount()) - before;
+  // A distinct message for "did something" makes a deploy log answer the
+  // question "did this release migrate?" at a glance.
+  console.info(applied > 0 ? `migrate: applied ${applied}` : "migrate: up to date");
 } catch (error) {
   console.error("migrate: failed", error);
   process.exitCode = 1;
