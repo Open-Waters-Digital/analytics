@@ -30,7 +30,7 @@
 
 ## 5. End to end and docs
 
-- [ ] 5.1 Sign in end to end locally against the compose database using the terminal fallback: request link, open it, land on the original page, sign out; record the result in the change
+- [x] 5.1 Sign in end to end locally against the compose database using the terminal fallback: request link, open it, land on the original page, sign out; record the result in the change
 - [x] 5.2 Confirm in a production build that the session cookie carries `HttpOnly`, `SameSite=Lax` and `Secure` (behind HTTPS or with the production flag), and that no log line contains an address, token or link
 - [x] 5.3 Update AGENTS.md: flip Access to ✅, add the auth files to the repo tree, add the variables to the first-deploy list; verify no stale reference to "proposed"
 - [x] 5.4 Run `pnpm run ci:quality` and report the real result
@@ -73,7 +73,10 @@ Not done:
 
 - **1.3** Agent permissions deny reading or writing `.env.example`. The lines to
   add are given to the user; tick once they are in.
-- **5.1** as written (terminal fallback via `next dev`) was not run, because a
-  `next dev` server was already running in this repo and Next allows one per
-  project. The fallback is covered by unit tests (`magic-link.test.ts`,
-  `env.test.ts`); the end-to-end run above used the production build instead.
+
+Task 5.1, run separately on 17 September 2026 with `next dev` and no
+`RESEND_API_KEY`: a signed-out visit to `/design-system` redirected to
+`/sign-in?returnTo=%2Fdesign-system`; the link was printed to the terminal once;
+opening it signed in and landed on `/design-system` with the address in the
+header; Sign out went to `/sign-in`; replaying the old session cookie redirected
+to sign-in.
