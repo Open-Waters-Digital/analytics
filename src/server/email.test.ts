@@ -29,6 +29,18 @@ describe("createLinkSender", () => {
     );
   });
 
+  it("keeps the status code when Resend sends no error name", async () => {
+    // What Resend returned in production for a sender on an unverified domain.
+    const send = vi.fn(async () => ({
+      error: {
+        statusCode: 403,
+        message: "This API key is not authorized to send emails from openwaters.digital",
+      },
+    }));
+    const sender = createLinkSender(options, { emails: { send } });
+    await expect(sender("alex@openwaters.digital", url)).rejects.toEqual(new EmailSendError("403"));
+  });
+
   it("rejects with EmailTimeoutError when Resend does not answer in time", async () => {
     vi.useFakeTimers();
     try {

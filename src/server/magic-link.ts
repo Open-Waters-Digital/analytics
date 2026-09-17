@@ -42,6 +42,7 @@ export async function deliverMagicLink(
     deps.log.info("auth: magic link sent");
     return "sent";
   } catch (error) {
+    // "403" from Resend usually means AUTH_EMAIL_FROM is not on a verified domain.
     deps.log.error(`auth: magic link send failed (${describeError(error)})`);
     return "failed";
   }

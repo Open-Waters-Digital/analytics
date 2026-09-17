@@ -12,7 +12,7 @@ interface EmailClient {
       subject: string;
       text: string;
       html: string;
-    }): Promise<{ error: { name?: string } | null }>;
+    }): Promise<{ error: { name?: string; statusCode?: number | null } | null }>;
   };
 }
 
@@ -43,7 +43,13 @@ export function createLinkSender(
         }),
         timeout,
       ]);
-      if (result.error) throw new EmailSendError(result.error.name ?? "resend_error");
+      if (result.error) {
+        // Resend does not always send a name (a 403 for an unverified sender
+        // domain has only a status and message), so the status is kept too.
+        // The message is not logged: it can name the recipient.
+        const parts = [result.error.name, result.error.statusCode].filter(part => part != null);
+        throw new EmailSendError(parts.length > 0 ? parts.join(" ") : "resend_error");
+      }
     } finally {
       clearTimeout(timer);
     }
