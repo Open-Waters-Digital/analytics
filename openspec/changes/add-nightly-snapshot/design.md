@@ -100,38 +100,51 @@ making the nightly cost grow.
 
 ### Days come from ClickHouse, not from Node
 
-Each query groups by `toDate(toTimeZone(timestamp, {timezone}))` and filters on
-that same expression between `{from}` and `{to}`, with a coarse
-`timestamp > now() - INTERVAL 45 DAY` so ClickHouse can skip partitions. The
-site's IANA timezone (already validated on the site record) is passed as a
-placeholder value.
+Each query groups by `toDate(toTimeZone(timestamp, <timezone>))` and filters on
+that same expression between the two day bounds, with a coarse
+`timestamp > now() - INTERVAL 45 DAY` so ClickHouse can skip partitions.
 
 Doing the conversion in HogQL avoids writing a DST-correct "start of day in
 Europe/London" helper in Node, which is the kind of code that is wrong twice a
 year.
 
-### One request per metric group, five groups per site
+**The values are interpolated, not bound.** `HogQLQuery` carries a `values`
+object in PostHog's own schema, but it is absent from the public API reference,
+so nothing here depends on it. Instead `src/server/posthog-queries.ts` has one
+`literal()` helper that accepts a date only as `YYYY-MM-DD` and a timezone only
+as an IANA name it can find in `Intl.supportedValuesOf("timeZone")`, and throws
+otherwise. Both values come from our own validated records, and neither can
+reach a query without passing that gate.
 
-| Group      | Query returns                                                           |
-| ---------- | ----------------------------------------------------------------------- |
-| Traffic    | page views, sessions, daily visitors                                    |
-| Breakdowns | page views by page type, sessions by channel, landing page views        |
-| Intent     | `cta_clicked`, `contact_link_clicked`, `file_downloaded`,               |
-|            | `outbound_link_clicked`, `video_played`, sessions reaching 75% scroll   |
-| Action     | `form_started`, `form_submitted`, `form_abandoned`, `form_error_shown`, |
-|            | `lead_submitted`                                                        |
-| Revenue    | `lead_qualified`, `deal_won`, `deal_won` value                          |
+### One request per metric group, six groups per site
 
-Every group returns the same four columns (`day`, `metric`, `dimension`,
+| Group    | Source     | Returns                                                                                                                |
+| -------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Traffic  | `events`   | page views, daily visitors                                                                                             |
+| Pages    | `events`   | page views by `page_type`                                                                                              |
+| Sessions | `sessions` | sessions, sessions by `$channel_type`, landing page views by `$entry_pathname`                                         |
+| Intent   | `events`   | `cta_clicked`, `contact_link_clicked`, `file_downloaded`, `outbound_link_clicked`, `video_played`, 75%-scroll sessions |
+| Action   | `events`   | `form_started`, `form_submitted`, `form_abandoned`, `form_error_shown`, `lead_submitted`                               |
+| Revenue  | `events`   | `lead_qualified`, `deal_won`, `deal_won` value                                                                         |
+
+Every query returns the same four columns (`day`, `metric`, `dimension`,
 `value`) by `UNION ALL`, so one parser and one Zod schema handle all of them,
 and adding a metric is a line of SQL rather than a new code path.
 
-Five requests per site per night is far inside PostHog's limits, and a group
-that fails is identifiable in the logs.
+Six requests per site per night is far inside PostHog's limits, and a group that
+fails is identifiable in the logs.
+
+**Sessions come from the `sessions` table**, which PostHog populates with
+`$session_id`, `$start_timestamp`, `$channel_type` and `$entry_pathname` among
+others, rather than from a join on every event. A session is therefore counted
+on the day it started while its events are counted on the day they happened; for
+a session crossing midnight those differ, which is right for both.
 
 Rejected: **one query per site** (a single typo loses everything, and the query
 becomes unreadable); **one query per metric** (about twenty requests per site,
-for no benefit).
+for no benefit); **deriving the channel from `$referring_domain` and UTM
+properties here** (PostHog already computes `$channel_type` and keeps it
+current).
 
 ### `daily_visitors` is a daily number and must never be summed
 
@@ -141,8 +154,9 @@ of them is not a weekly-unique count. The metric is named `daily_visitors` to
 make misuse harder, and the rule is a comment on the metric list and a line in
 AGENTS.md.
 
-Sessions come from `uniq($session_id)`, which cookieless server hash mode
-provides.
+Sessions come from the `sessions` table, which cookieless server hash mode
+still populates; `scroll_75_sessions` uses `uniq(properties.$session_id)` on the
+events themselves.
 
 ### A shared query function, reusing the existing classifier
 

@@ -14,6 +14,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { timestamps } from "./columns";
 
 /**
  * The client registry (openspec change add-client-registry). Conventions from
@@ -48,14 +49,6 @@ export const siteChangeKind = pgEnum("site_change_kind", [
   "experiment",
   "tracking",
 ]);
-
-const timestamps = {
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-};
 
 export const clients = pgTable(
   "clients",

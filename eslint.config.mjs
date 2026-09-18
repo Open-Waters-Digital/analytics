@@ -53,6 +53,27 @@ export default defineConfig([
   },
 
   {
+    // The nightly job runs as the system, with no session to check. Reaching it
+    // from a page or an action would be a way to read a client's data without
+    // one. Everything the app reads goes through @/server/snapshots/read.
+    files: ["src/app/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/server/snapshots/collect", "**/snapshots/collect"],
+              message:
+                "The snapshot job runs with no session. Read snapshots through @/server/snapshots/read.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // The browser must never reach the database or server secrets. Client
     // components are the ones that cannot import these; server-only modules
     // enforce it at build time too.

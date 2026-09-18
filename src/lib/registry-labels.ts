@@ -100,3 +100,42 @@ export function formatDateTime(date: Date): string {
     timeZone: "Europe/London",
   }).format(date);
 }
+
+export const SNAPSHOT_OUTCOME_LABELS = {
+  ok: "Pulled",
+  failed: "Failed",
+  skipped: "Skipped",
+} as const;
+
+export const SNAPSHOT_OUTCOME_TONES: Record<keyof typeof SNAPSHOT_OUTCOME_LABELS, Tone> = {
+  ok: "success",
+  failed: "danger",
+  skipped: "neutral",
+};
+
+/**
+ * "4 hours ago", for a time whose exact minute does not matter. The exact time
+ * is always shown beside it, because "2 days ago" is not something to act on.
+ */
+export function formatRelative(date: Date, now: Date = new Date()): string {
+  const seconds = Math.round((date.getTime() - now.getTime()) / 1000);
+  const units = [
+    ["minute", 60],
+    ["hour", 3600],
+    ["day", 86400],
+  ] as const;
+
+  if (Math.abs(seconds) < 60) return "just now";
+  let chosen: Intl.RelativeTimeFormatUnit = "minute";
+  let divisor = 60;
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) {
+      chosen = unit;
+      divisor = size;
+    }
+  }
+  return new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" }).format(
+    Math.round(seconds / divisor),
+    chosen,
+  );
+}

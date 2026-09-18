@@ -109,8 +109,28 @@ client's visitor-level data is stored.
 
 ### Data pulls
 
-- 🟡 **Nightly PostHog snapshot**: per site with a working connection, the day's
-  aggregates for the baseline dashboard metrics.
+- ✅ **Nightly PostHog snapshot** (`add-nightly-snapshot`, spec `daily-snapshots`).
+  Per site with a working connection, the day's aggregates for the baseline
+  dashboard metrics, pulled with HogQL through the stored Query Read key.
+  - **Six queries per site**, all returning `day, metric, dimension, value,
+value_minor, currency`, stored in `site_daily_metrics`. The metric list is
+    `src/lib/snapshot-metrics.ts`, pinned by a test against the event list.
+  - **Seven days re-pulled every night, thirty on a site's first pull**, in one
+    transaction per site, so a re-run replaces rather than doubles and a failure
+    leaves the previous values alone. Days with nothing on them are stored as
+    zeroes, so a missing row means "not pulled".
+  - **Breakdown values come from a client's site**: paths only (no query
+    strings), truncated to 200 characters, the top 50 per metric per day.
+  - **`daily_visitors` is never summed across days.** Cookieless PostHog gives
+    each visitor a hash that changes daily, so seven daily figures do not make a
+    weekly one.
+  - **These numbers can differ from the client's PostHog UI**, because
+    "Filter out internal and test users" is a view-level filter the query API
+    ignores, and because days here are the site's own timezone.
+  - `src/server/snapshots/collect.ts` is the **only module under `src/server`
+    with no session check**: it runs as the system, from the cron service, and
+    an ESLint rule stops anything in `src/app` importing it. The app reads
+    through `src/server/snapshots/read.ts`.
 - 🟡 **Drift check**: unknown event names and expected events that stopped
   arriving, per site, surfaced on the client page and the overview.
 - 🟡 **Search Console and PageSpeed pulls**: one Open Waters service account and
@@ -134,7 +154,9 @@ Locked. Revisit only if a dependency changes.
 2. ✅ `add-magic-link-auth`.
 3. ✅ `add-client-registry`. Still to do: connect a real PostHog project (task 6.5).
 4. ✅ Live at `analytics.openwaters.digital` (17 September 2026). Two 🧱 items remain: CSP and error tracking.
-5. 🟡 Nightly PostHog snapshot, with the Railway cron service.
+5. ✅ `add-nightly-snapshot`. The `analytics-jobs` cron service is declared in
+   `.railway/railway.ts` and starts running when `railway config apply` creates
+   it.
 6. 🟡 Drift check.
 7. 🟡 Search Console and PageSpeed pulls.
 8. 🟡 Overview screen.
@@ -161,13 +183,15 @@ Locked. Revisit only if a dependency changes.
 │   │   ├── registry/      RegistryForm: the one form component for registry screens
 │   │   └── showcase/      Section / Row / Entry for /design-system
 │   ├── db/                Drizzle schema and client. auth-schema.ts is generated
-│   ├── server/            Env, auth, session gate, crypto, PostHog check. Server only
-│   │   └── registry/      Data access layer for the registry: session check, validation, writes
+│   ├── server/            Env, auth, session gate, crypto, PostHog queries. Server only
+│   │   ├── registry/      Data access layer for the registry: session check, validation, writes
+│   │   └── snapshots/     collect.ts runs as the system (the job); read.ts checks the session
 │   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
 │   ├── lib/               Framework-free helpers safe for any module
 │   └── test/              Test database setup (global-setup.ts) and session stand-in
-├── scripts/               Node entry points bundled to dist/ (migrate, later jobs)
+├── scripts/               Node entry points bundled to dist/
+│   └── jobs/              nightly-snapshot.ts: the cron service's command
 ├── drizzle/               Generated migrations. Reviewed, committed, never edited
 ├── compose.yaml           Local Postgres on port 5433
 ├── Dockerfile             Multi-stage, standalone runtime, non-root
@@ -189,7 +213,7 @@ Locked. Revisit only if a dependency changes.
 | Tests          | Vitest                                                | ✅                     |
 | Auth           | Better Auth 1.7, magic link via Resend                | ✅                     |
 | Email          | Resend                                                | ✅                     |
-| Nightly jobs   | Railway cron service, bundled script, same image      | 🟡                     |
+| Nightly jobs   | Railway cron service, bundled script, same image      | ✅                     |
 | Error tracking | PostHog error tracking in an Open Waters organisation | 🧪                     |
 | Hosting        | Railway, Docker                                       | ✅ config, 🟡 deployed |
 
@@ -317,7 +341,9 @@ report recipients, encrypted PostHog API keys, and **aggregate** daily numbers
 per site.
 
 **Never stored here:** individual visitor data, session recordings, enquiry
-contents, IP addresses of client-site visitors.
+contents, IP addresses of client-site visitors. The nightly snapshot asks
+PostHog for counts only; no query it sends selects or groups by a distinct id, a
+session id or a page address with its query string, and a test asserts that.
 
 **Rules:**
 
@@ -345,6 +371,32 @@ settings live in `.railway/railway.ts` (Railway Infrastructure as Code).
 | Pre-deploy   | `node dist/migrate.mjs`: applies pending Drizzle migrations. A non-zero exit stops the deploy and the previous version keeps serving | `preDeploy`                  |
 | Start        | `node server.js` (Next standalone server)                                                                                            | `start`                      |
 | Health check | `GET /api/health` must return 200 within 60 seconds                                                                                  | `healthcheck`                |
+
+### The `analytics-jobs` cron service
+
+A second Railway service, built from the same repository and the same
+`Dockerfile`, declared in the same `.railway/railway.ts`:
+
+| Setting | Value                                               |
+| ------- | --------------------------------------------------- |
+| Start   | `node dist/jobs/nightly-snapshot.mjs`               |
+| Cron    | `20 3 * * *` (03:20 UTC)                            |
+| Health  | None: the container runs once and exits             |
+| Deploy  | No pre-deploy. Migrations belong to the web service |
+| Vars    | `DATABASE_URL`, `CREDENTIALS_ENCRYPTION_KEY` only   |
+
+`CREDENTIALS_ENCRYPTION_KEY` must be **the same value** as the web service, or
+stored client keys cannot be decrypted. The job reads `databaseEnv()` and
+`credentialsKey()` only, never `env()`, so a missing auth or email variable
+cannot stop the pull.
+
+Exit codes are what Railway's run history shows: **0** when the run completed,
+even with failed sites (a failed site is data, shown on the client page), and
+**1** only when the run could not run at all.
+
+```bash
+railway logs --service analytics-jobs   # one JSON line per site, one summary
+```
 
 **Not `railway.json`.** Railway ignores `railway.json` for services created
 after Config as Code was deprecated, without any warning in the deploy. This

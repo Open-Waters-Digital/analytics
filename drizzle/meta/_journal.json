@@ -15,6 +15,13 @@
       "when": 1789658442775,
       "tag": "0001_client_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789709794601,
+      "tag": "0002_curious_puck",
+      "breakpoints": true
     }
   ]
 }

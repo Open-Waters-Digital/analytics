@@ -11,10 +11,12 @@ client's PostHog project.
 ### Requirement: A nightly pull for every connected site
 
 Once a day the system SHALL pull the previous day's aggregate numbers from
-PostHog for every site that has a PostHog connection whose last check succeeded
-and whose client's status is `onboarding`, `active` or `paused`. It SHALL skip
-sites with no connection, sites whose client is `offboarded`, and sites whose
-connection last failed.
+PostHog for every site whose client's status is `onboarding`, `active` or
+`paused` and which has a PostHog connection PostHog has not rejected. It SHALL
+skip sites with no connection, sites whose client is `offboarded`, and sites
+whose stored connection was last rejected by PostHog. A connection whose last
+attempt failed because PostHog could not be reached SHALL still be tried, since
+an outage says nothing about the key.
 
 #### Scenario: Connected site
 
@@ -35,6 +37,11 @@ connection last failed.
 
 - **WHEN** a site's connection last check was `unauthorised`
 - **THEN** the site is skipped with that reason, and no PostHog query is made
+
+#### Scenario: Connection last hit an outage
+
+- **WHEN** a site's last pull failed because PostHog could not be reached
+- **THEN** the next run tries it again rather than skipping it
 
 ### Requirement: What is collected
 

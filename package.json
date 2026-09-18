@@ -24,6 +24,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
+    "job:snapshot": "tsx --env-file-if-exists=.env.local scripts/jobs/nightly-snapshot.ts",
     "ci:quality": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run format:check && pnpm run build",
     "auth:schema": "pnpm dlx auth@1.7.5 generate --config scripts/auth-schema.config.ts --output src/db/auth-schema.ts --yes && prettier --write src/db/auth-schema.ts"
   },

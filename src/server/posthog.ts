@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 /**
- * The PostHog connection check: a read-only aggregate query proving a key can
- * query a project. The nightly job will use the same function.
+ * Talking to PostHog: one place that knows the host, the auth header, the
+ * timeout and how to read a failure. The connection check and the nightly
+ * snapshot both go through `runHogQlQuery`.
  *
  * Messages are fixed strings. PostHog's own error text is never shown or stored,
  * because it could echo details of the request.
@@ -17,7 +18,17 @@ export interface CheckResult {
   message: string | null;
 }
 
+export interface PostHogConnection {
+  region: PostHogRegion;
+  projectId: number;
+  apiKey: string;
+}
+
+/** A person is waiting for this one. */
 export const CHECK_TIMEOUT_MS = 10_000;
+/** The snapshot's queries aggregate up to thirty days, and nobody is waiting. */
+export const QUERY_TIMEOUT_MS = 30_000;
+export const RETRY_DELAY_MS = 5_000;
 
 export const CHECK_MESSAGES = {
   unauthorised:
@@ -55,31 +66,52 @@ export function classifyCheckResponse(status: number, body: unknown): CheckResul
   return { status: "error", message: CHECK_MESSAGES.unexpected };
 }
 
-export async function checkPostHogConnection(
-  input: { region: PostHogRegion; projectId: number; apiKey: string },
-  fetchImpl: typeof fetch = fetch,
-  timeoutMs = CHECK_TIMEOUT_MS,
-): Promise<CheckResult> {
-  const url = `${HOSTS[input.region]}/api/projects/${input.projectId}/query/`;
+/** True for the failures that are worth trying once more: rate limits and outages. */
+export function isRetryable(status: number): boolean {
+  return status === 429 || status >= 500 || status === 0;
+}
+
+export interface QueryOptions {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  /** Shown in PostHog's own query log, so a slow query can be traced back. */
+  name?: string;
+}
+
+export type QueryOutcome =
+  { ok: true; body: unknown } | { ok: false; status: number; failure: CheckResult };
+
+/**
+ * Runs one HogQL query. Never throws: a transport failure becomes status 0,
+ * which `isRetryable` treats like an outage.
+ */
+export async function runHogQlQuery(
+  connection: PostHogConnection,
+  query: string,
+  options: QueryOptions = {},
+): Promise<QueryOutcome> {
+  const { fetchImpl = fetch, timeoutMs = QUERY_TIMEOUT_MS, name = "openwaters_query" } = options;
+  const url = `${HOSTS[connection.region]}/api/projects/${connection.projectId}/query/`;
 
   let response: Response;
   try {
     response = await fetchImpl(url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${input.apiKey}`,
+        authorization: `Bearer ${connection.apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        query: { kind: "HogQLQuery", query: CHECK_QUERY },
-        name: "openwaters_connection_check",
-      }),
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query }, name }),
       signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
   } catch {
     // Timeout, DNS failure, connection reset: all "could not be reached".
-    return { status: "error", message: CHECK_MESSAGES.unreachable };
+    return {
+      ok: false,
+      status: 0,
+      failure: { status: "error", message: CHECK_MESSAGES.unreachable },
+    };
   }
 
   let body: unknown = null;
@@ -88,5 +120,48 @@ export async function checkPostHogConnection(
   } catch {
     body = null;
   }
-  return classifyCheckResponse(response.status, body);
+
+  const classified = classifyCheckResponse(response.status, body);
+  return classified.status === "ok"
+    ? { ok: true, body }
+    : { ok: false, status: response.status, failure: classified };
+}
+
+/**
+ * One retry on a rate limit or an outage, then give up. Anything else (a
+ * rejected key, a missing project) fails immediately: retrying cannot help.
+ */
+export async function runHogQlQueryWithRetry(
+  connection: PostHogConnection,
+  query: string,
+  options: QueryOptions & { sleep?: (ms: number) => Promise<void> } = {},
+): Promise<QueryOutcome> {
+  const { sleep = defaultSleep, ...queryOptions } = options;
+  const first = await runHogQlQuery(connection, query, queryOptions);
+  if (first.ok || !isRetryable(first.status)) return first;
+
+  await sleep(RETRY_DELAY_MS);
+  return runHogQlQuery(connection, query, queryOptions);
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * The connection check: a read-only aggregate query proving a key can query a
+ * project. No retry, because someone is waiting for the answer and would rather
+ * press the button again than wait fifteen seconds.
+ */
+export async function checkPostHogConnection(
+  input: PostHogConnection,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = CHECK_TIMEOUT_MS,
+): Promise<CheckResult> {
+  const outcome = await runHogQlQuery(input, CHECK_QUERY, {
+    fetchImpl,
+    timeoutMs,
+    name: "openwaters_connection_check",
+  });
+  return outcome.ok ? { status: "ok", message: null } : outcome.failure;
 }

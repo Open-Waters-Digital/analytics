@@ -47,5 +47,29 @@ export default defineRailway(() => {
     },
   });
 
-  return project("analytics.openwaters.digital", { resources: [analytics] });
+  // The nightly snapshot (scripts/jobs/nightly-snapshot.ts), as its own cron
+  // service built from the same repo and the same Dockerfile. Railway starts a
+  // container on the schedule, runs the command, and expects it to exit.
+  //
+  // No preDeploy: migrations belong to one service, and two services racing to
+  // migrate the same database gains nothing. No healthcheck: nothing is
+  // listening. The restart policy is left at Railway's default, because setting
+  // it explicitly produced a permanent diff last time.
+  const jobs = service("analytics-jobs", {
+    source: github("Open-Waters-Digital/analytics", { branch: "main" }),
+    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
+    start: "node dist/jobs/nightly-snapshot.mjs",
+    // 03:20 UTC: after any ingestion lag, outside UK working hours.
+    deploy: { cronSchedule: "20 3 * * *" },
+    replicas: 1,
+    // Set in the dashboard on this service, then held here. DATABASE_URL is the
+    // same Postgres reference the web service uses; CREDENTIALS_ENCRYPTION_KEY
+    // must be the identical value, or stored keys cannot be decrypted.
+    env: {
+      DATABASE_URL: preserve(),
+      CREDENTIALS_ENCRYPTION_KEY: preserve(),
+    },
+  });
+
+  return project("analytics.openwaters.digital", { resources: [analytics, jobs] });
 });

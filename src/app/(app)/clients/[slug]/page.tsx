@@ -8,6 +8,7 @@ import { Badge, StatusDot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DescriptionList } from "@/components/ui/description-list";
 import { Panel } from "@/components/ui/panel";
+import { Table, Td, Th, Tr } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/variants";
 import { eventsFor } from "@/lib/event-list";
 import {
@@ -17,15 +18,19 @@ import {
   formatDateTime,
   formatMoney,
   formatPercent,
+  formatRelative,
   FRAMEWORK_LABELS,
   OWNERSHIP_LABELS,
   REGION_LABELS,
+  SNAPSHOT_OUTCOME_LABELS,
+  SNAPSHOT_OUTCOME_TONES,
   SOURCE_LABELS,
   STAGE_LABELS,
   STATUS_LABELS,
   STATUS_TONES,
 } from "@/lib/registry-labels";
 import { getClientDetail, type ClientDetail, type SiteDetail } from "@/server/registry/clients";
+import { getSiteSnapshots, type SiteSnapshot } from "@/server/snapshots/read";
 import {
   addRecipientAction,
   addSiteChangeAction,
@@ -56,6 +61,8 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
   const { slug } = await params;
   const client = await getClientDetail(slug);
   if (!client) notFound();
+
+  const snapshots = await getSiteSnapshots(client.sites.map(site => site.id));
 
   return (
     <main className="mx-auto flex max-w-(--container-max) flex-col gap-6 px-(--gutter) py-8">
@@ -102,7 +109,14 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
           </p>
         </Panel>
       ) : (
-        client.sites.map(site => <SitePanel key={site.id} client={client} site={site} />)
+        client.sites.map(site => (
+          <SitePanel
+            key={site.id}
+            client={client}
+            site={site}
+            snapshot={snapshots.get(site.id) ?? null}
+          />
+        ))
       )}
 
       <RecipientsPanel client={client} />
@@ -110,7 +124,15 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
   );
 }
 
-function SitePanel({ client, site }: { client: ClientDetail; site: SiteDetail }) {
+function SitePanel({
+  client,
+  site,
+  snapshot,
+}: {
+  client: ClientDetail;
+  site: SiteDetail;
+  snapshot: SiteSnapshot | null;
+}) {
   const slug = client.slug;
   const clientOwned = client.analyticsOwnership === "client_owned";
   const connection = connectionDisplay(site.posthog, clientOwned);
@@ -207,6 +229,10 @@ function SitePanel({ client, site }: { client: ClientDetail; site: SiteDetail })
                 columns={2}
               />
             </Disclosure>
+          </SubSection>
+
+          <SubSection title="Measurement">
+            <SnapshotSummary snapshot={snapshot} connected={site.posthog !== null} />
           </SubSection>
 
           <SubSection title="Search Console">
@@ -404,6 +430,78 @@ function CommercialSummary({ site }: { site: SiteDetail }) {
         },
       ]}
     />
+  );
+}
+
+/**
+ * What the nightly snapshot last did for this site, and the week it holds. The
+ * table is the same shape for every site, so two clients can be compared by
+ * looking, and it scrolls inside its wrapper at 375px like every other table.
+ */
+function SnapshotSummary({
+  snapshot,
+  connected,
+}: {
+  snapshot: SiteSnapshot | null;
+  connected: boolean;
+}) {
+  const last = snapshot?.lastResult ?? null;
+
+  if (!last) {
+    return (
+      <p className="text-data">
+        <Muted>
+          {connected
+            ? "Not pulled yet. The nightly snapshot will collect the first thirty days."
+            : "Nothing to pull until PostHog is connected."}
+        </Muted>
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-data">
+        <StatusDot
+          tone={SNAPSHOT_OUTCOME_TONES[last.outcome]}
+          label={SNAPSHOT_OUTCOME_LABELS[last.outcome]}
+        />
+        <Muted>
+          {formatRelative(last.at)} · {formatDateTime(last.at)}
+        </Muted>
+      </p>
+
+      {last.outcome !== "ok" && last.reason ? (
+        <Alert tone={last.outcome === "failed" ? "danger" : "info"}>{last.reason}</Alert>
+      ) : null}
+
+      {snapshot && snapshot.days.length > 0 ? (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Day</Th>
+              <Th className="text-right">Page views</Th>
+              <Th className="text-right">Sessions</Th>
+              <Th className="text-right">Leads</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {snapshot.days.map(day => (
+              <Tr key={day.day}>
+                <Td className="whitespace-nowrap">{formatDate(day.day)}</Td>
+                <Td className="text-right tabular-nums">{day.pageViews}</Td>
+                <Td className="text-right tabular-nums">{day.sessions}</Td>
+                <Td className="text-right tabular-nums">{day.leads}</Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      ) : (
+        <p className="text-data">
+          <Muted>No days stored yet.</Muted>
+        </p>
+      )}
+    </div>
   );
 }
 

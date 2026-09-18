@@ -4,14 +4,54 @@ import { Badge, StatusDot } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
 import { Table, Td, Th, Tr } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/variants";
-import { OWNERSHIP_LABELS, STATUS_LABELS, STATUS_TONES } from "@/lib/registry-labels";
+import {
+  formatDateTime,
+  formatRelative,
+  OWNERSHIP_LABELS,
+  STATUS_LABELS,
+  STATUS_TONES,
+} from "@/lib/registry-labels";
 import { listClients } from "@/server/registry/clients";
+import { getLastSnapshotRun, isStale, type SnapshotRun } from "@/server/snapshots/read";
 
 export const metadata: Metadata = { title: "Clients" };
 
+/**
+ * The nightly job has no other voice: if it stops running, nothing else on this
+ * screen changes. This line is how that becomes visible.
+ */
+function SnapshotLine({ run }: { run: SnapshotRun | null }) {
+  const stale = isStale(run, new Date());
+  const finished = run?.finishedAt;
+
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+      <StatusDot
+        tone={stale ? "warning" : "success"}
+        label={
+          finished
+            ? `Snapshot last ran ${formatRelative(finished)}`
+            : run
+              ? "Snapshot started but never finished"
+              : "Snapshot has never run"
+        }
+      />
+      {finished ? <span className="text-ink-muted">{formatDateTime(finished)}</span> : null}
+      {run && finished ? (
+        <span className="text-ink-muted tabular-nums">
+          · {run.sitesOk} pulled, {run.sitesFailed} failed, {run.sitesSkipped} skipped
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
 export default async function ClientsPage({ searchParams }: PageProps<"/clients">) {
   const includeOffboarded = (await searchParams).offboarded === "1";
-  const clients = await listClients({ includeOffboarded });
+  const [clients, lastRun] = await Promise.all([
+    listClients({ includeOffboarded }),
+    getLastSnapshotRun(),
+  ]);
 
   return (
     <main className="mx-auto flex max-w-(--container-max) flex-col gap-6 px-(--gutter) py-8">
@@ -26,6 +66,8 @@ export default async function ClientsPage({ searchParams }: PageProps<"/clients"
           Add client
         </Link>
       </header>
+
+      <SnapshotLine run={lastRun} />
 
       <Panel>
         {clients.length === 0 ? (

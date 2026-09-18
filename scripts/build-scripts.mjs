@@ -10,7 +10,10 @@
 import { build } from "esbuild";
 
 await build({
-  entryPoints: { migrate: "scripts/migrate.ts" },
+  entryPoints: {
+    migrate: "scripts/migrate.ts",
+    "jobs/nightly-snapshot": "scripts/jobs/nightly-snapshot.ts",
+  },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },
   bundle: true,
