@@ -78,6 +78,9 @@ export const sites = pgTable(
     launchedOn: date({ mode: "string" }),
     taxonomyVersion: integer().notNull(),
     timezone: text().notNull(),
+    // Whether the site runs a consent banner. Only such a site is expected to
+    // send consent_updated; see the expected-event defaults.
+    hasConsentBanner: boolean().notNull().default(false),
     ...timestamps,
   },
   table => [index("sites_client_id_idx").on(table.clientId)],

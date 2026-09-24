@@ -1,0 +1,6 @@
+{
+  "extends": [
+    "github>Open-Waters-Digital/renovate-config",
+    "github>Open-Waters-Digital/analytics-contract//renovate/default"
+  ]
+}

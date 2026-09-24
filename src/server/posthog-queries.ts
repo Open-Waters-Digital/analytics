@@ -3,6 +3,7 @@ import {
   MAX_DIMENSION_LENGTH,
   NO_DIMENSION,
   NO_DIMENSION_VALUE,
+  NOT_RECORDED_DIMENSION_VALUE,
   snapshotMetric,
 } from "@/lib/snapshot-metrics";
 
@@ -95,6 +96,15 @@ export function buildSnapshotQueries(window: SnapshotWindow): SnapshotQuery[] {
       from: "events",
       where: `${eventWindow} AND event = ${sqlString(event)}`,
     });
+  /** A breakdown by a property the contract added in `version`. */
+  const eventsSince = (metric: string, event: string, dimension: string, version: number) =>
+    branch({
+      day: eventDay,
+      metric,
+      dimension: propertySince(dimension, version),
+      from: "events",
+      where: `${eventWindow} AND event = ${sqlString(event)}`,
+    });
 
   return [
     {
@@ -153,6 +163,15 @@ export function buildSnapshotQueries(window: SnapshotWindow): SnapshotQuery[] {
         events("form_abandoned", "form_abandoned", "form_id"),
         events("form_error_shown", "form_error_shown", "form_id"),
         events("lead_submitted", "lead_submitted", "lead_type"),
+        eventsSince("leads_by_channel", "lead_submitted", "channel", 3),
+        eventsSince("leads_by_heard_about", "lead_submitted", "heard_about", 3),
+      ]),
+    },
+    {
+      group: "consent",
+      query: wrap([
+        events("consent_updated", "consent_updated", "advertising"),
+        eventsSince("page_views_by_ad_consent", "$pageview", "ad_consent", 2),
       ]),
     },
     {
@@ -220,6 +239,19 @@ LIMIT 20000`;
 
 function property(name: string): string {
   return fallback(`properties.${name}`);
+}
+
+/**
+ * A property the contract added in `version`: "(not recorded)" on an event sent
+ * at an older taxonomy version, whatever it carries, and "(none)" when an event
+ * at that version or later has it empty. A missing taxonomy_version reads as 1.
+ */
+function propertySince(name: string, version: number): string {
+  if (!Number.isInteger(version) || version < 1) {
+    throw new TypeError("Refusing to build a query from an unexpected version");
+  }
+  const sent = `toInt(ifNull(nullIf(toString(properties.taxonomy_version), ''), '1'))`;
+  return `if(${sent} < ${version}, ${sqlString(NOT_RECORDED_DIMENSION_VALUE)}, ${property(name)})`;
 }
 
 /** An absent or empty breakdown value reads as "(none)", not as a blank cell. */

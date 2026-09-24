@@ -98,10 +98,17 @@ client's visitor-level data is stored.
     when replacing reuses the stored one.
   - **Search Console properties** are stored and shown as "Not checked" until
     the Search Console pull adds a check.
-  - **Expected events** default to the whole event list for the site's version.
+  - **Expected events** default to the whole event list for the site's version,
+    less `consent_updated` unless the site is marked **has a consent banner**.
     Changing a site's version does not change them: adopting a new version is a
-    deliberate step. The list mirrors the `openwaters-analytics` skill in
-    `src/lib/event-list.ts`, pinned by a test.
+    deliberate step. Marking or unmarking the banner adds or removes exactly
+    `consent_updated`, and nothing else.
+  - **The event list comes from the contract package**,
+    `@open-waters-digital/analytics/contract` (`adopt-the-contract-package`).
+    `src/lib/event-list.ts` only maps its shape onto this app's; no event list
+    is defined here, and the package pins every published version. A new
+    taxonomy version arrives as a Renovate pull request, and fails this app's
+    tests until every listed event has a snapshot metric.
   - Every registry function lives in `src/server/registry/`, checks the session
     first and returns field errors as values. Forms are all
     `src/components/registry/registry-form.tsx` driven by field lists in
@@ -112,9 +119,16 @@ client's visitor-level data is stored.
 - ✅ **Nightly PostHog snapshot** (`add-nightly-snapshot`, spec `daily-snapshots`).
   Per site with a working connection, the day's aggregates for the baseline
   dashboard metrics, pulled with HogQL through the stored Query Read key.
-  - **Six queries per site**, all returning `day, metric, dimension, value,
+  - **Seven queries per site**, all returning `day, metric, dimension, value,
 value_minor, currency`, stored in `site_daily_metrics`. The metric list is
-    `src/lib/snapshot-metrics.ts`, pinned by a test against the event list.
+    `src/lib/snapshot-metrics.ts`, pinned by a test against every published
+    event list.
+  - **v2 and v3 breakdowns** (`adopt-the-contract-package`): `consent_updated` by
+    `advertising`, page views by `ad_consent`, and leads by `channel` and by
+    `heard_about`. A property newer than the event that should carry it reads
+    `(not recorded)`, decided per event from its own `taxonomy_version`, so it
+    is distinct from `(none)` ("measured, and empty") and right across a
+    mid-week upgrade. The client page sums them over the last seven days.
   - **Seven days re-pulled every night, thirty on a site's first pull**, in one
     transaction per site, so a re-run replaces rather than doubles and a failure
     leaves the previous values alone. Days with nothing on them are stored as
@@ -193,7 +207,9 @@ Locked. Revisit only if a dependency changes.
 ├── scripts/               Node entry points bundled to dist/
 │   └── jobs/              nightly-snapshot.ts: the cron service's command
 ├── drizzle/               Generated migrations. Reviewed, committed, never edited
-├── compose.yaml           Local Postgres on port 5433
+├── compose.yaml           Local Postgres on port 5433 (luxury-gardens uses 5433 too: run one at a time)
+├── .npmrc                 The @open-waters-digital scope on GitHub Packages, token from NODE_AUTH_TOKEN
+├── renovate.json          Organisation settings (renovate-config), then the contract package's rules
 ├── Dockerfile             Multi-stage, standalone runtime, non-root
 ├── .railway/railway.ts    Railway service config: pre-deploy migrations, health check. Applied by CLI
 ```
@@ -460,6 +476,7 @@ and no lockfile. The migration script is bundled with its dependencies into
 | `AUTH_EMAIL_FROM`            | `Open Waters Analytics <noreply@analytics.openwaters.digital>`                                                                   |
 | `CREDENTIALS_ENCRYPTION_KEY` | `openssl rand -base64 32`. Keep a copy in the password manager                                                                   |
 | `AUTH_ALLOWED_EMAILS`        | Comma-separated partner addresses                                                                                                |
+| `NODE_AUTH_TOKEN`            | Build argument: a classic GitHub token with `read:packages` only, to install `@open-waters-digital/analytics`. Also a CI secret  |
 
 The migration step reads only `DATABASE_URL`. The web server refuses to serve
 authenticated pages until the rest are valid.

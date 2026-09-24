@@ -30,7 +30,12 @@ import {
   STATUS_TONES,
 } from "@/lib/registry-labels";
 import { getClientDetail, type ClientDetail, type SiteDetail } from "@/server/registry/clients";
-import { getSiteSnapshots, type SiteSnapshot } from "@/server/snapshots/read";
+import {
+  getSiteSnapshots,
+  RECENT_DAYS,
+  type BreakdownMetric,
+  type SiteSnapshot,
+} from "@/server/snapshots/read";
 import {
   addRecipientAction,
   addSiteChangeAction,
@@ -501,9 +506,26 @@ function SnapshotSummary({
           <Muted>No days stored yet.</Muted>
         </p>
       )}
+
+      {snapshot?.breakdowns.map(breakdown => (
+        <p key={breakdown.metric} className="flex flex-wrap gap-x-2 gap-y-1 text-data">
+          <span>
+            {BREAKDOWN_LABELS[breakdown.metric]}, last {RECENT_DAYS} days:
+          </span>
+          <Muted>
+            {breakdown.values.map(({ dimension, value }) => `${dimension} ${value}`).join(" · ")}
+          </Muted>
+        </p>
+      ))}
     </div>
   );
 }
+
+const BREAKDOWN_LABELS: Record<BreakdownMetric, string> = {
+  leads_by_channel: "Leads by channel",
+  leads_by_heard_about: "Leads by how they heard",
+  page_views_by_ad_consent: "Page views by ad consent",
+};
 
 function SubSection({ title, children }: { title: string; children: ReactNode }) {
   return (

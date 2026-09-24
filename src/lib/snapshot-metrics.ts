@@ -7,7 +7,7 @@
  * without adding a metric here fails a test, so the two cannot drift.
  */
 
-export type MetricStage = "attention" | "intent" | "action" | "revenue";
+export type MetricStage = "attention" | "intent" | "action" | "consent" | "revenue";
 
 export interface SnapshotMetric {
   name: string;
@@ -30,6 +30,14 @@ export const MAX_DIMENSION_LENGTH = 200;
 
 /** Used when a breakdown property is missing or empty on the event. */
 export const NO_DIMENSION_VALUE = "(none)";
+
+/**
+ * Used when the event was sent at a taxonomy version older than the property,
+ * so the site could not have sent it: "does not measure this yet", as distinct
+ * from "(none)", "measured, and empty". Decided per event from its own
+ * taxonomy_version, so a site that upgrades mid-week is right on both sides.
+ */
+export const NOT_RECORDED_DIMENSION_VALUE = "(not recorded)";
 
 /** The dimension column's value for a metric with no breakdown. */
 export const NO_DIMENSION = "";
@@ -73,6 +81,23 @@ export const SNAPSHOT_METRICS: readonly SnapshotMetric[] = [
   { name: "form_abandoned", stage: "action", dimension: "form_id", event: "form_abandoned" },
   { name: "form_error_shown", stage: "action", dimension: "form_id", event: "form_error_shown" },
   { name: "lead_submitted", stage: "action", dimension: "lead_type", event: "lead_submitted" },
+  // Taxonomy v3. A lead sent at v1 or v2 is "(not recorded)".
+  { name: "leads_by_channel", stage: "action", dimension: "channel", event: "lead_submitted" },
+  {
+    name: "leads_by_heard_about",
+    stage: "action",
+    dimension: "heard_about",
+    event: "lead_submitted",
+  },
+
+  // Taxonomy v2, sites with a consent banner. Coverage is the share of page
+  // views with ad_consent "granted"; a page view sent at v1 is "(not recorded)".
+  { name: "consent_updated", stage: "consent", dimension: "advertising", event: "consent_updated" },
+  {
+    name: "page_views_by_ad_consent",
+    stage: "consent",
+    dimension: "ad_consent",
+  },
 
   { name: "lead_qualified", stage: "revenue", dimension: "lead_type", event: "lead_qualified" },
   { name: "deal_won", stage: "revenue", dimension: "lead_type", event: "deal_won", money: true },

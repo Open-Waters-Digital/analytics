@@ -44,6 +44,10 @@ export default defineRailway(() => {
       AUTH_EMAIL_FROM: preserve(),
       AUTH_ALLOWED_EMAILS: preserve(),
       CREDENTIALS_ENCRYPTION_KEY: preserve(),
+      // Build argument: installs @open-waters-digital/analytics from GitHub
+      // Packages. A token with read:packages only; the Dockerfile keeps it in
+      // the deps stage.
+      NODE_AUTH_TOKEN: preserve(),
     },
   });
 
@@ -68,6 +72,7 @@ export default defineRailway(() => {
     env: {
       DATABASE_URL: preserve(),
       CREDENTIALS_ENCRYPTION_KEY: preserve(),
+      NODE_AUTH_TOKEN: preserve(), // Build argument, as on the web service.
     },
   });
 

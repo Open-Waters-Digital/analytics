@@ -99,7 +99,7 @@ describe("getSiteSnapshots", () => {
   it("says nothing was pulled for a site that never was", async () => {
     const siteId = await newSite();
     const snapshots = await getSiteSnapshots([siteId]);
-    expect(snapshots.get(siteId)).toEqual({ lastResult: null, days: [] });
+    expect(snapshots.get(siteId)).toEqual({ lastResult: null, days: [], breakdowns: [] });
   });
 
   it("returns an entry for every site asked for, and nothing else", async () => {
@@ -110,6 +110,40 @@ describe("getSiteSnapshots", () => {
 
   it("returns an empty map for no sites, without querying", async () => {
     expect(await getSiteSnapshots([])).toEqual(new Map());
+  });
+
+  it("sums each breakdown over the recent days, largest first, leaving out empty ones", async () => {
+    const siteId = await newSite();
+    const old = isoDay(-(RECENT_DAYS + 3));
+    await getDb()
+      .insert(siteDailyMetrics)
+      .values([
+        { siteId, day: isoDay(-1), metric: "leads_by_channel", dimension: "paid_social", value: 2 },
+        { siteId, day: isoDay(-2), metric: "leads_by_channel", dimension: "paid_social", value: 1 },
+        { siteId, day: isoDay(-2), metric: "leads_by_channel", dimension: "unknown", value: 1 },
+        { siteId, day: isoDay(-1), metric: "leads_by_channel", dimension: "referral", value: 0 },
+        // Older than the window: not counted.
+        { siteId, day: old, metric: "leads_by_channel", dimension: "email", value: 9 },
+        {
+          siteId,
+          day: isoDay(-1),
+          metric: "page_views_by_ad_consent",
+          dimension: "unset",
+          value: 70,
+        },
+      ]);
+
+    const snapshot = (await getSiteSnapshots([siteId])).get(siteId);
+    expect(snapshot?.breakdowns).toEqual([
+      {
+        metric: "leads_by_channel",
+        values: [
+          { dimension: "paid_social", value: 3 },
+          { dimension: "unknown", value: 1 },
+        ],
+      },
+      { metric: "page_views_by_ad_consent", values: [{ dimension: "unset", value: 70 }] },
+    ]);
   });
 
   it("reads the headline numbers, newest day first", async () => {

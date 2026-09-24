@@ -102,6 +102,13 @@ export function siteFields(site?: SiteDetail): FieldSpec[] {
       defaultValue: String(site?.taxonomyVersion ?? EVENT_LIST_VERSION),
     },
     {
+      kind: "checkbox",
+      name: "hasConsentBanner",
+      label: "Has a consent banner",
+      hint: "Only for sites running ads or replay behind a banner. Adds consent_updated to the expected events.",
+      defaultChecked: site?.hasConsentBanner ?? false,
+    },
+    {
       kind: "text",
       name: "timezone",
       label: "Timezone",

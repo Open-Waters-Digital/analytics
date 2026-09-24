@@ -55,6 +55,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # Reads @open-waters-digital/analytics from GitHub Packages: a GitHub
+          # token with read:packages only.
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Run quality gate
         run: pnpm run ci:quality
@@ -96,6 +100,10 @@ jobs:
           push: false
           load: true
           tags: analytics:ci
+          # Only the deps stage declares it, so it never reaches the runtime
+          # image. The same build argument Railway passes from its variable.
+          build-args: |
+            NODE_AUTH_TOKEN=${{ secrets.NODE_AUTH_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

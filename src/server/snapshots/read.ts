@@ -31,6 +31,20 @@ export interface SiteDay {
   leads: number;
 }
 
+/** Breakdowns summed over the recent days, shown under the daily table. */
+export const BREAKDOWN_METRICS = [
+  "leads_by_channel",
+  "leads_by_heard_about",
+  "page_views_by_ad_consent",
+] as const;
+export type BreakdownMetric = (typeof BREAKDOWN_METRICS)[number];
+
+export interface Breakdown {
+  metric: BreakdownMetric;
+  /** Largest first. Only values with something counted. */
+  values: { dimension: string; value: number }[];
+}
+
 export interface SiteSnapshot {
   lastResult: {
     outcome: "ok" | "failed" | "skipped";
@@ -39,6 +53,8 @@ export interface SiteSnapshot {
     daysWritten: number;
   } | null;
   days: SiteDay[];
+  /** Only breakdowns with data, in BREAKDOWN_METRICS order. */
+  breakdowns: Breakdown[];
 }
 
 /** The most recent run, finished or not. Null when the job has never run. */
@@ -70,12 +86,12 @@ export function isStale(run: SnapshotRun | null, now: Date): boolean {
 export async function getSiteSnapshots(siteIds: string[]): Promise<Map<string, SiteSnapshot>> {
   await requireSession();
   const snapshots = new Map<string, SiteSnapshot>(
-    siteIds.map(siteId => [siteId, { lastResult: null, days: [] }]),
+    siteIds.map(siteId => [siteId, { lastResult: null, days: [], breakdowns: [] }]),
   );
   if (siteIds.length === 0) return snapshots;
 
   const db = getDb();
-  const [results, days] = await Promise.all([
+  const [results, days, breakdownRows] = await Promise.all([
     // One row per site: the latest result, whichever run it came from.
     db
       .select({
@@ -104,7 +120,35 @@ export async function getSiteSnapshots(siteIds: string[]): Promise<Map<string, S
         ),
       )
       .groupBy(siteDailyMetrics.siteId, siteDailyMetrics.day, siteDailyMetrics.metric),
+    db
+      .select({
+        siteId: siteDailyMetrics.siteId,
+        metric: siteDailyMetrics.metric,
+        dimension: siteDailyMetrics.dimension,
+        value: sql<number>`sum(${siteDailyMetrics.value})::int`,
+      })
+      .from(siteDailyMetrics)
+      .where(
+        and(
+          inArray(siteDailyMetrics.siteId, siteIds),
+          inArray(siteDailyMetrics.metric, [...BREAKDOWN_METRICS]),
+          gte(siteDailyMetrics.day, sql`current_date - cast(${RECENT_DAYS} as int)`),
+        ),
+      )
+      .groupBy(siteDailyMetrics.siteId, siteDailyMetrics.metric, siteDailyMetrics.dimension)
+      .orderBy(desc(sql`sum(${siteDailyMetrics.value})`), siteDailyMetrics.dimension),
   ]);
+
+  for (const siteId of siteIds) {
+    const snapshot = snapshots.get(siteId);
+    if (!snapshot) continue;
+    for (const metric of BREAKDOWN_METRICS) {
+      const values = breakdownRows
+        .filter(row => row.siteId === siteId && row.metric === metric && row.value > 0)
+        .map(row => ({ dimension: row.dimension, value: row.value }));
+      if (values.length > 0) snapshot.breakdowns.push({ metric, values });
+    }
+  }
 
   for (const result of results) {
     const snapshot = snapshots.get(result.siteId);

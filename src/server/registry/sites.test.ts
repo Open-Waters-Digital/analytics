@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { getDb } from "@/db/client";
 import { siteChanges, siteExpectedEvents, sites } from "@/db/schema";
 import { eventsFor } from "@/lib/event-list";
+import { testSession } from "@/test/mock-session";
+import { UnauthorisedError } from "@/server/session-policy";
 import { createClient, getClientDetail, listClients } from "./clients";
 import { addRecipient, removeRecipient } from "./recipients";
 import {
@@ -78,6 +80,36 @@ describe("sites", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.fieldErrors["productionUrl"]).toMatch(message);
+  });
+
+  it("rejects an event list version the contract does not have, saving nothing", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const result = await createSite(slug, {
+      productionUrl,
+      framework: "astro",
+      taxonomyVersion: "9",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fieldErrors["taxonomyVersion"]).toBe(
+        "Choose an event list version that exists.",
+      );
+    }
+    const saved = await getDb().select().from(sites).where(eq(sites.productionUrl, productionUrl));
+    expect(saved).toEqual([]);
+  });
+
+  it("accepts versions 1 to 3", async () => {
+    const slug = await newClient();
+    for (const taxonomyVersion of ["1", "2", "3"]) {
+      const result = await createSite(slug, {
+        productionUrl: `https://${hex()}.example.com`,
+        framework: "next",
+        taxonomyVersion,
+      });
+      expect(result.ok).toBe(true);
+    }
   });
 
   it("rejects a URL another site already uses, across clients", async () => {
@@ -266,6 +298,88 @@ describe("expected events", () => {
     const result = await setExpectedEvents(siteId, { events: ["cta_clicked", "page_liked"] });
     expect(result.ok).toBe(false);
     expect((await siteOf(slug, siteId)).expectedEvents).toHaveLength(eventsFor(1)!.length);
+  });
+});
+
+describe("consent banner", () => {
+  const v2Names = () => eventsFor(2)!.map(event => event.name);
+  const siteInput = (productionUrl: string, hasConsentBanner?: string) => ({
+    productionUrl,
+    framework: "next",
+    taxonomyVersion: "2",
+    ...(hasConsentBanner === undefined ? {} : { hasConsentBanner }),
+  });
+
+  it("a v2 site without a banner expects every v2 event but consent_updated", async () => {
+    const slug = await newClient();
+    const siteId = await newSite(slug, { taxonomyVersion: "2" });
+    const site = await siteOf(slug, siteId);
+    expect(site.hasConsentBanner).toBe(false);
+    expect(site.expectedEvents.sort()).toEqual(
+      v2Names()
+        .filter(name => name !== "consent_updated")
+        .sort(),
+    );
+  });
+
+  it("a v2 site with a banner expects consent_updated too", async () => {
+    const slug = await newClient();
+    const siteId = await newSite(slug, { taxonomyVersion: "2", hasConsentBanner: "on" });
+    const site = await siteOf(slug, siteId);
+    expect(site.hasConsentBanner).toBe(true);
+    expect(site.expectedEvents.sort()).toEqual(v2Names().sort());
+  });
+
+  it("toggling the banner moves only consent_updated, and a hand-removed event stays removed", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const siteId = await newSite(slug, { productionUrl, taxonomyVersion: "2" });
+    const withoutDownloads = (await siteOf(slug, siteId)).expectedEvents.filter(
+      name => name !== "file_downloaded",
+    );
+    expect((await setExpectedEvents(siteId, { events: withoutDownloads })).ok).toBe(true);
+
+    expect((await updateSite(siteId, siteInput(productionUrl, "on"))).ok).toBe(true);
+    const on = (await siteOf(slug, siteId)).expectedEvents;
+    expect(on).toContain("consent_updated");
+    expect(on).not.toContain("file_downloaded");
+    expect(on.sort()).toEqual([...withoutDownloads, "consent_updated"].sort());
+
+    expect((await updateSite(siteId, siteInput(productionUrl))).ok).toBe(true);
+    const off = (await siteOf(slug, siteId)).expectedEvents;
+    expect(off.sort()).toEqual([...withoutDownloads].sort());
+  });
+
+  it("a banner on a v1 site adds nothing, since v1 has no consent_updated", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const siteId = await newSite(slug, { productionUrl });
+    const before = (await siteOf(slug, siteId)).expectedEvents.sort();
+    const result = await updateSite(siteId, {
+      productionUrl,
+      framework: "astro",
+      taxonomyVersion: "1",
+      hasConsentBanner: "on",
+    });
+    expect(result.ok).toBe(true);
+    expect((await siteOf(slug, siteId)).expectedEvents.sort()).toEqual(before);
+  });
+
+  it("rejects a signed-out caller without writing", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const siteId = await newSite(slug, { productionUrl, taxonomyVersion: "2" });
+    testSession.signedIn = false;
+    try {
+      await expect(updateSite(siteId, siteInput(productionUrl, "on"))).rejects.toBeInstanceOf(
+        UnauthorisedError,
+      );
+    } finally {
+      testSession.signedIn = true;
+    }
+    const site = await siteOf(slug, siteId);
+    expect(site.hasConsentBanner).toBe(false);
+    expect(site.expectedEvents).not.toContain("consent_updated");
   });
 });
 

@@ -23,6 +23,17 @@ import {
 
 const URL_TAKEN = "Another site already uses this URL.";
 
+/** Sent only by a site with a consent banner, so only such a site expects it. */
+const CONSENT_EVENT = "consent_updated";
+
+/** A new site expects its whole version's list, less consent_updated without a banner. */
+function defaultExpectedEvents(
+  events: readonly ListedEvent[],
+  hasConsentBanner: boolean,
+): string[] {
+  return events.map(event => event.name).filter(name => hasConsentBanner || name !== CONSENT_EVENT);
+}
+
 export async function createSite(
   clientSlug: string,
   input: unknown,
@@ -45,11 +56,14 @@ export async function createSite(
         .insert(sites)
         .values({ ...parsed.data, clientId: client.id })
         .returning({ id: sites.id });
-      const events = deps.eventsFor(parsed.data.taxonomyVersion) ?? [];
-      if (events.length > 0) {
+      const names = defaultExpectedEvents(
+        deps.eventsFor(parsed.data.taxonomyVersion) ?? [],
+        parsed.data.hasConsentBanner,
+      );
+      if (names.length > 0) {
         await tx
           .insert(siteExpectedEvents)
-          .values(events.map(event => ({ siteId: site!.id, event: event.name })));
+          .values(names.map(event => ({ siteId: site!.id, event })));
       }
       return site!.id;
     });
@@ -66,6 +80,11 @@ export async function createSite(
  * Changing the event list version does not change expected events: adopting a
  * new version is a deliberate step on the expected events form, so old sites do
  * not suddenly "expect" events they were never built to send.
+ *
+ * Marking or unmarking the consent banner is the one exception, and it changes
+ * exactly one expected event: consent_updated is added (if the site's version
+ * lists it) or removed, in the same transaction, and nothing else moves. An
+ * event removed by hand stays removed.
  */
 export async function updateSite(siteId: string, input: unknown): Promise<Result> {
   await requireSession();
@@ -73,12 +92,38 @@ export async function updateSite(siteId: string, input: unknown): Promise<Result
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
-    const updated = await getDb()
-      .update(sites)
-      .set(parsed.data)
-      .where(eq(sites.id, siteId))
-      .returning({ id: sites.id });
-    return updated.length === 1 ? ok() : formError("That site no longer exists.");
+    const updated = await getDb().transaction(async tx => {
+      const [before] = await tx
+        .select({ hasConsentBanner: sites.hasConsentBanner })
+        .from(sites)
+        .where(eq(sites.id, siteId));
+      if (!before) return false;
+      await tx.update(sites).set(parsed.data).where(eq(sites.id, siteId));
+
+      const banner = parsed.data.hasConsentBanner;
+      if (banner !== before.hasConsentBanner) {
+        const listed = (eventsFor(parsed.data.taxonomyVersion) ?? []).some(
+          event => event.name === CONSENT_EVENT,
+        );
+        if (banner && listed) {
+          await tx
+            .insert(siteExpectedEvents)
+            .values({ siteId, event: CONSENT_EVENT })
+            .onConflictDoNothing();
+        } else if (!banner) {
+          await tx
+            .delete(siteExpectedEvents)
+            .where(
+              and(
+                eq(siteExpectedEvents.siteId, siteId),
+                eq(siteExpectedEvents.event, CONSENT_EVENT),
+              ),
+            );
+        }
+      }
+      return true;
+    });
+    return updated ? ok() : formError("That site no longer exists.");
   } catch (error) {
     if (isUniqueViolation(error, "sites_productionUrl_unique")) {
       return fieldError("productionUrl", URL_TAKEN);

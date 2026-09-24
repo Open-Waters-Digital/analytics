@@ -29,6 +29,11 @@ WORKDIR /app
 # Dependencies: manifests only, so this layer is cached until they change.
 # -----------------------------------------------------------------------------
 FROM base AS deps
+# Reads @open-waters-digital/analytics from GitHub Packages (see .npmrc).
+# Declared in this stage only. Railway has no BuildKit secret mounts and passes
+# service variables as build arguments, which a stage's history records, so the
+# token stays in the stage that installs and the runtime stage never sees it.
+ARG NODE_AUTH_TOKEN
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 

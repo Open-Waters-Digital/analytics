@@ -41,7 +41,12 @@ export const CHANGE_KIND_LABELS = {
   tracking: "Tracking",
 } as const;
 
-export const STAGE_LABELS = { intent: "Intent", action: "Action", revenue: "Revenue" } as const;
+export const STAGE_LABELS = {
+  intent: "Intent",
+  action: "Action",
+  consent: "Consent",
+  revenue: "Revenue",
+} as const;
 
 export function optionsFrom<T extends Record<string, string>>(labels: T) {
   return Object.entries(labels).map(([value, label]) => ({ value, label }));

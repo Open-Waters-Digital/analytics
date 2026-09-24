@@ -45,6 +45,25 @@ describe("literals", () => {
 describe("buildSnapshotQueries", () => {
   const queries = buildSnapshotQueries(window);
 
+  it("breaks leads down by channel and heard_about only for events sent at v3 or later", () => {
+    const action = queries.find(query => query.group === "action")?.query ?? "";
+    for (const metric of ["leads_by_channel", "leads_by_heard_about"]) {
+      expect(action).toContain(`'${metric}' AS metric`);
+    }
+    expect(action).toContain(
+      "if(toInt(ifNull(nullIf(toString(properties.taxonomy_version), ''), '1')) < 3, '(not recorded)', ifNull(nullIf(toString(properties.channel), ''), '(none)'))",
+    );
+    expect(action).toContain("properties.heard_about");
+  });
+
+  it("breaks page views down by ad_consent only for events sent at v2 or later", () => {
+    const consent = queries.find(query => query.group === "consent")?.query ?? "";
+    expect(consent).toContain("'consent_updated' AS metric");
+    expect(consent).toContain("event = 'consent_updated'");
+    expect(consent).toContain("< 2, '(not recorded)'");
+    expect(consent).toContain("properties.ad_consent");
+  });
+
   it("builds one query per group, each bounded by the window", () => {
     expect(queries.map(query => query.group)).toEqual([
       "traffic",
@@ -52,6 +71,7 @@ describe("buildSnapshotQueries", () => {
       "sessions",
       "intent",
       "action",
+      "consent",
       "revenue",
     ]);
     for (const { group, query } of queries) {

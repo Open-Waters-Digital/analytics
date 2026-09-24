@@ -22,6 +22,13 @@
       "when": 1789709794601,
       "tag": "0002_curious_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790258573715,
+      "tag": "0003_site_consent_banner",
+      "breakpoints": true
     }
   ]
 }

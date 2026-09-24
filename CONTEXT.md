@@ -30,12 +30,22 @@ connection is saved, on demand, and before every nightly pull.
 
 **Event list** (taxonomy)
 The shared set of event names and properties every Open Waters site sends,
-versioned (`taxonomy_version`). Defined in the `openwaters-analytics` skill,
-never in this app.
+versioned (`taxonomy_version`). Defined in the contract package,
+`@open-waters-digital/analytics` (repo `analytics-contract`), never in this app.
 
 **Expected events**
 The subset of the event list a particular site should send. A site with no
 downloads does not expect `file_downloaded`.
+
+**Consent banner** (`has_consent_banner`)
+Whether a site runs a consent banner for ads or replay. Only such a site is
+expected to send `consent_updated`, and only its page views are worth reading
+by `ad_consent`.
+
+**(not recorded)**
+A breakdown value meaning the event was sent at a taxonomy version older than
+the property, so the site could not have sent it. Not the same as `(none)`,
+which means it could have and the value was empty.
 
 **Drift**
 A difference between the event list and what a site actually sent: an event

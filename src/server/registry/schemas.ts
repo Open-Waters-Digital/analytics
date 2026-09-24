@@ -125,6 +125,7 @@ export const siteSchema = z.object({
     .default("Europe/London")
     .transform(value => value || "Europe/London")
     .refine(isValidTimezone, "Use an IANA timezone name, such as Europe/London."),
+  hasConsentBanner: checkbox,
 });
 
 export const removeSchema = z.object({ confirm: confirmYes });

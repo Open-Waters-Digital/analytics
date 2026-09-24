@@ -14,6 +14,7 @@ import { encryptApiKey, KEY_VERSION, lastFour } from "@/server/crypto";
 import { CHECK_MESSAGES } from "@/server/posthog";
 import { runNightlySnapshot, SNAPSHOT_MESSAGES, type SiteResult } from "./collect";
 import { FIRST_PULL_DAYS, WINDOW_DAYS } from "./window";
+import { MAX_DIMENSION_LENGTH } from "@/lib/snapshot-metrics";
 
 /**
  * These run against the real test database (src/test/global-setup.ts) and a
@@ -313,6 +314,101 @@ describe("runNightlySnapshot", () => {
       reason: SNAPSHOT_MESSAGES.unreadableResponse,
     });
     expect(await metricsFor(site.siteId)).toEqual([]);
+  });
+
+  describe("leads by channel and heard_about (taxonomy v3)", () => {
+    const dimensionsOf = (rows: Awaited<ReturnType<typeof metricsFor>>, metric: string) =>
+      Object.fromEntries(
+        rows
+          .filter(row => row.day === yesterday && row.metric === metric)
+          .map(row => [row.dimension, row.value]),
+      );
+
+    it("keeps a v2 site's leads as (not recorded)", async () => {
+      const site = await newSite();
+      await run(
+        postHogStub({
+          action: [
+            [yesterday, "lead_submitted", "general", 3, 0, ""],
+            [yesterday, "leads_by_channel", "(not recorded)", 3, 0, ""],
+            [yesterday, "leads_by_heard_about", "(not recorded)", 3, 0, ""],
+          ],
+        }),
+      );
+      const stored = await metricsFor(site.siteId);
+      expect(dimensionsOf(stored, "leads_by_channel")).toEqual({ "(not recorded)": 3 });
+      expect(dimensionsOf(stored, "leads_by_heard_about")).toEqual({ "(not recorded)": 3 });
+    });
+
+    it("splits a v3 site's leads by channel, and keeps an empty heard_about as (none)", async () => {
+      const site = await newSite();
+      await run(
+        postHogStub({
+          action: [
+            [yesterday, "lead_submitted", "garden-design", 3, 0, ""],
+            [yesterday, "leads_by_channel", "paid_social", 2, 0, ""],
+            [yesterday, "leads_by_channel", "unknown", 1, 0, ""],
+            [yesterday, "leads_by_heard_about", "recommendation", 1, 0, ""],
+            [yesterday, "leads_by_heard_about", "(none)", 2, 0, ""],
+          ],
+        }),
+      );
+      const stored = await metricsFor(site.siteId);
+      expect(dimensionsOf(stored, "leads_by_channel")).toEqual({ paid_social: 2, unknown: 1 });
+      expect(dimensionsOf(stored, "leads_by_heard_about")).toEqual({
+        recommendation: 1,
+        "(none)": 2,
+      });
+    });
+
+    it("stores consent choices and page views by ad_consent", async () => {
+      const site = await newSite();
+      await run(
+        postHogStub({
+          consent: [
+            [yesterday, "consent_updated", "true", 4, 0, ""],
+            [yesterday, "consent_updated", "false", 6, 0, ""],
+            [yesterday, "page_views_by_ad_consent", "granted", 30, 0, ""],
+            [yesterday, "page_views_by_ad_consent", "unset", 70, 0, ""],
+          ],
+        }),
+      );
+      const stored = await metricsFor(site.siteId);
+      expect(dimensionsOf(stored, "consent_updated")).toEqual({ true: 4, false: 6 });
+      expect(dimensionsOf(stored, "page_views_by_ad_consent")).toEqual({ granted: 30, unset: 70 });
+    });
+
+    it("truncates an over-long breakdown value", async () => {
+      const site = await newSite();
+      await run(
+        postHogStub({
+          action: [
+            [yesterday, "leads_by_channel", "x".repeat(MAX_DIMENSION_LENGTH + 50), 1, 0, ""],
+          ],
+        }),
+      );
+      const row = (await metricsFor(site.siteId)).find(
+        candidate => candidate.metric === "leads_by_channel",
+      );
+      expect(row?.dimension).toHaveLength(MAX_DIMENSION_LENGTH);
+    });
+
+    it("fails the whole site, storing nothing, when one group's query fails", async () => {
+      const site = await newSite();
+      const good = postHogStub({
+        action: [[yesterday, "leads_by_channel", "paid_social", 2, 0, ""]],
+      });
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as { name: string };
+        if (body.name === "openwaters_snapshot_consent") {
+          return new Response("{}", { status: 500 });
+        }
+        return good(url, init);
+      });
+      const summary = await run(fetchImpl);
+      expect(resultFor(summary, site.siteId).outcome).toBe("failed");
+      expect(await metricsFor(site.siteId)).toEqual([]);
+    });
   });
 
   it("refuses to add up two currencies in a day", async () => {

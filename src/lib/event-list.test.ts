@@ -1,30 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { EVENT_LIST_VERSION, eventsFor, isKnownVersion } from "./event-list";
 
+// The package pins every published version itself; these check that the
+// adapter exposes them, not what they contain.
 describe("event list", () => {
-  // Pins version 1 exactly. If this fails, the copy has drifted from the
-  // openwaters-analytics skill's events.md, or a published version was edited.
-  it("matches version 1 of the openwaters-analytics skill", () => {
-    expect(eventsFor(1)?.map(event => [event.name, event.stage, event.server])).toEqual([
-      ["cta_clicked", "intent", false],
-      ["contact_link_clicked", "intent", false],
-      ["file_downloaded", "intent", false],
-      ["outbound_link_clicked", "intent", false],
-      ["scroll_depth_reached", "intent", false],
-      ["video_played", "intent", false],
-      ["form_started", "action", false],
-      ["form_error_shown", "action", false],
-      ["form_abandoned", "action", false],
-      ["form_submitted", "action", false],
-      ["lead_submitted", "action", true],
-      ["lead_qualified", "revenue", true],
-      ["deal_won", "revenue", true],
-    ]);
+  it("knows versions 1 to 3, and not a version that does not exist", () => {
+    expect([1, 2, 3].every(isKnownVersion)).toBe(true);
+    expect(isKnownVersion(9)).toBe(false);
+    expect(eventsFor(9)).toBeUndefined();
   });
 
-  it("has the current version", () => {
-    expect(EVENT_LIST_VERSION).toBe(1);
-    expect(isKnownVersion(EVENT_LIST_VERSION)).toBe(true);
-    expect(isKnownVersion(2)).toBe(false);
+  it("defaults new sites to the newest version the package knows", () => {
+    expect(EVENT_LIST_VERSION).toBe(3);
+  });
+
+  it("maps the contract's shape: consent from v2, server events flagged", () => {
+    expect(eventsFor(1)?.some(event => event.name === "consent_updated")).toBe(false);
+    expect(eventsFor(2)?.find(event => event.name === "consent_updated")?.stage).toBe("consent");
+    expect(eventsFor(3)?.find(event => event.name === "lead_submitted")).toEqual({
+      name: "lead_submitted",
+      stage: "action",
+      server: true,
+    });
   });
 });

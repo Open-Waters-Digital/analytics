@@ -2,5 +2,16 @@ allowBuilds:
   esbuild: true
   sharp: false
   unrs-resolver: false
+  # From posthog-js, which @open-waters-digital/analytics peers on. Its script
+  # only prints a banner.
+  core-js: false
+
+# pnpm refuses anything published in the last day. Strict makes it stop and ask
+# instead of quietly writing an exemption here when a local install meets one.
+minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
   - "@fission-ai/openspec@1.13.1"
+  # Our own packages. The one-day wait guards against a third party's package
+  # being hijacked; these are published by our own release workflow, so waiting
+  # on them would only delay our own fixes.
+  - "@open-waters-digital/*"

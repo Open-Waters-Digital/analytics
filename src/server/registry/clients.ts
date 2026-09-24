@@ -46,6 +46,7 @@ export interface SiteDetail {
   repository: string | null;
   launchedOn: string | null;
   taxonomyVersion: number;
+  hasConsentBanner: boolean;
   timezone: string;
   posthog: PublicPostHogConnection | null;
   searchConsoleProperty: string | null;
@@ -211,6 +212,7 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
       repository: site.repository,
       launchedOn: site.launchedOn,
       taxonomyVersion: site.taxonomyVersion,
+      hasConsentBanner: site.hasConsentBanner,
       timezone: site.timezone,
       posthog: connection
         ? {

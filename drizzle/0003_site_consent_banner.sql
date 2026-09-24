@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "has_consent_banner" boolean DEFAULT false NOT NULL;
