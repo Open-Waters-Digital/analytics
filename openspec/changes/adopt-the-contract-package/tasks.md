@@ -26,8 +26,8 @@
   - a banner toggled on and then off, with a hand-removed event staying removed
   - a signed-out call rejected
   - Five integration tests: a v2 site without a banner, a v2 site with one, a toggle on then off with a hand-removed event staying removed, a banner on v1 adding nothing, and a signed-out call rejected without writing. `SiteDetail` gains `hasConsentBanner`.
-- [ ] 3.3 Add the checkbox to the site form. Verify at 375px, and confirm that a saved value survives a failed validation on another field.
-  - The checkbox is in, and the form re-checks it from the submitted values after a failed validation (existing registry-form behaviour). Waiting on Alex's hand check at 375px while signed in: there are no browser tests in this repo.
+- [x] 3.3 Add the checkbox to the site form. Verify at 375px, and confirm that a saved value survives a failed validation on another field.
+  - The checkbox is in, and the form re-checks it from the submitted values after a failed validation (existing registry-form behaviour). Accepted without a browser check on 2026-09-24 (Alex): an internal tool, low risk, to be fixed if it looks wrong in use.
 
 ## 4. Metrics
 
@@ -40,8 +40,8 @@
   - over-long values are truncated
   - a failing query for one metric fails that site's run without partial rows
   - Five collector tests: (not recorded), a channel split with an empty heard_about as (none), consent choices, truncation, and one failing group failing the site with nothing stored.
-- [ ] 4.3 Show the new metrics on the client page's panel. Verify at 375px with seeded rows.
-  - Seven-day breakdown totals are in the reader, with a test, and shown as lines under the daily table using existing primitives only. Waiting on Alex's hand check at 375px with seeded rows.
+- [x] 4.3 Show the new metrics on the client page's panel. Verify at 375px with seeded rows.
+  - Seven-day breakdown totals are in the reader, with a test, and shown as lines under the daily table using existing primitives only. Accepted without a browser check on 2026-09-24 (Alex): an internal tool, low risk, to be fixed if it looks wrong in use.
 
 ## 5. Documents
 
