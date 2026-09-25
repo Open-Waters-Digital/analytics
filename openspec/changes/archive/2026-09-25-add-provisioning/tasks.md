@@ -58,7 +58,7 @@
 
 ## 6. Panel
 
-- [ ] 6.1 Build the "PostHog project" panel on the client page:
+- [x] 6.1 Build the "PostHog project" panel on the client page:
   - the latest run
   - the project id and region
   - the key field with its scopes
@@ -69,6 +69,8 @@
   - the proxy status
 
   Use existing primitives only. Verify at 375px first, then wide, with a failing key, a fresh project and a matched project.
+
+  Accepted by Alex on 25 September 2026 without a signed-in browser check, as with the registry's earlier 375px checks: an internal tool for two people, and a layout problem is fixed in use.
 
 ## 7. Real run
 
