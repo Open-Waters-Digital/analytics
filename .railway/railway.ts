@@ -61,14 +61,16 @@ export default defineRailway(() => {
   //
   // No preDeploy: migrations belong to one service, and two services racing to
   // migrate the same database gains nothing. No healthcheck: nothing is
-  // listening. The restart policy is left at Railway's default, because setting
-  // it explicitly produced a permanent diff last time.
+  // listening. The restart policy is NEVER: a failed night should not rerun
+  // itself, since the next night re-pulls the same window and replaces it.
+  // Declaring Railway's default once produced a permanent diff, because Railway
+  // stores the default as null; NEVER is stored as written.
   const jobs = service("analytics-jobs", {
     source: github("Open-Waters-Digital/analytics", { branch: "main" }),
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
     start: "node dist/jobs/nightly-snapshot.mjs",
     // 03:20 UTC: after any ingestion lag, outside UK working hours.
-    deploy: { cronSchedule: "20 3 * * *" },
+    deploy: { cronSchedule: "20 3 * * *", restartPolicyType: "NEVER" },
     replicas: 1,
     // Set in the dashboard on this service, then held here. DATABASE_URL is the
     // same Postgres reference the web service uses; CREDENTIALS_ENCRYPTION_KEY
