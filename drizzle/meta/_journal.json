@@ -43,6 +43,13 @@
       "when": 1790335224934,
       "tag": "0005_provisioning_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790349006648,
+      "tag": "0006_search",
+      "breakpoints": true
     }
   ]
 }

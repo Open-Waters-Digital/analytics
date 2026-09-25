@@ -54,7 +54,7 @@ A user SHALL be able to record one Bing Webmaster Tools site per site, as an
 The system SHALL check a Search Console property or a Bing site when a user
 saves it and when a user asks for a check, by asking the engine whether the
 Open Waters account can read it. It SHALL store the outcome and the time, and
-SHALL show one of: "Readable", "No access", "Not found" or "Check failed". A
+SHALL show one of: "Readable", "No access" or "Check failed". A
 property never checked SHALL show "Not checked". The message shown SHALL be the
 app's own, never the engine's error text.
 
@@ -87,7 +87,7 @@ app's own, never the engine's error text.
 Once a day, as part of the nightly run and after the PostHog snapshot, the
 system SHALL pull each engine's data for every site whose client is
 `onboarding`, `active` or `paused` and whose property for that engine is not in
-state "No access" or "Not found". It SHALL re-pull the last 10 days on every
+state "No access". It SHALL re-pull the last 10 days on every
 run. Each site's pull from each engine SHALL be written in one
 transaction, so a re-run replaces rather than doubles and a failure leaves the
 previous values in place. The run SHALL record each site's result per source:
@@ -253,7 +253,7 @@ show, for the last 28 full days against the 28 before:
 - branded and non-branded clicks when brand terms are set, with the share of
   total clicks that the split covers
 - the top queries and top pages by clicks
-- organic search clicks beside PostHog's organic search page views and
+- organic search clicks beside PostHog's organic search sessions and
   enquiries with channel `organic_search`
 - how many of the sitemap's pages Google has indexed, and the pages it has not,
   with Google's reason

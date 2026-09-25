@@ -20,6 +20,8 @@ import {
   type MetricRow,
 } from "@/server/posthog-queries";
 import { CHECK_MESSAGES, runHogQlQueryWithRetry, type QueryOptions } from "@/server/posthog";
+import { mapWithConcurrency } from "./concurrency";
+import { runSearchPass, type IndexingSummary, type SearchDeps, type SearchResult } from "./search";
 import { FIRST_PULL_DAYS, snapshotWindow, WINDOW_DAYS, type DayWindow } from "./window";
 
 /**
@@ -63,7 +65,11 @@ export interface RunSummary {
   runId: string;
   startedAt: Date;
   finishedAt: Date;
+  /** PostHog, one per site. The run's ok, failed and skipped counts are these. */
   results: SiteResult[];
+  /** Google and Bing, one of each per site (add-search-console). */
+  searchResults: SearchResult[];
+  indexing: IndexingSummary[];
 }
 
 export interface SnapshotDeps {
@@ -72,6 +78,7 @@ export interface SnapshotDeps {
   masterKey: () => Buffer;
   sleep: (ms: number) => Promise<void>;
   concurrency: number;
+  search: Partial<SearchDeps>;
 }
 
 const defaultDeps: SnapshotDeps = {
@@ -80,6 +87,7 @@ const defaultDeps: SnapshotDeps = {
   masterKey: credentialsKey,
   sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
   concurrency: DEFAULT_CONCURRENCY,
+  search: {},
 };
 
 interface Candidate {
@@ -119,6 +127,15 @@ export async function runNightlySnapshot(
     return result;
   });
 
+  // Search after PostHog, in the same run: each source succeeds or fails on its
+  // own, and the run history shows which (design D6).
+  const search = await runSearchPass(runId, {
+    now: deps.now,
+    sleep: deps.sleep,
+    concurrency: deps.concurrency,
+    ...deps.search,
+  });
+
   const finishedAt = deps.now();
   await db
     .update(snapshotRuns)
@@ -132,7 +149,14 @@ export async function runNightlySnapshot(
 
   await pruneOldRuns(finishedAt);
 
-  return { runId, startedAt, finishedAt, results };
+  return {
+    runId,
+    startedAt,
+    finishedAt,
+    results,
+    searchResults: search.results,
+    indexing: search.indexing,
+  };
 }
 
 /**
@@ -379,28 +403,6 @@ function keyOf(...parts: string[]): string {
   return JSON.stringify(parts);
 }
 
-/**
- * Keeps a few sites in flight at once, so one slow project does not hold up the
- * rest and the work does not grow with the number of clients.
- */
-export async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-
-  const runners = Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, async () => {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await worker(items[index]!);
-    }
-  });
-
-  await Promise.all(runners);
-  return results;
-}
+export { mapWithConcurrency };
 
 export type { Candidate };

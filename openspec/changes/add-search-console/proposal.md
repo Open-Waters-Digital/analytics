@@ -34,7 +34,8 @@ app reads them. PageSpeed, which shared delivery step 7, becomes its own change,
 - **Both get a check.** Saving a property or a Bing site, and a Check button
   beside each, asks the engine whether the Open Waters account can read it. The
   result is stored with a time, as PostHog connections store theirs. "Not
-  checked" gives way to "Readable", "No access", "Not found" or "Check failed".
+  checked" gives way to "Readable", "No access" or "Check failed". Neither engine can tell a property
+  that was never shared from one that does not exist, so both are "No access".
 - **A Bing site field on each site**, beside the Search Console property,
   holding the site URL as Bing Webmaster Tools lists it.
 - **A nightly pull, in the existing `analytics-jobs` run.** For every site with
@@ -73,7 +74,7 @@ app reads them. PageSpeed, which shared delivery step 7, becomes its own change,
   impressions, click-through rate and average position for the last 28 days
   against the 28 before, for Google, Bing and the two together; branded and
   non-branded clicks; the top queries and pages; and one line that puts organic
-  search clicks beside PostHog's organic search page views and enquiries with
+  search clicks beside PostHog's organic search sessions and enquiries with
   channel `organic_search`.
 
 ## Capabilities

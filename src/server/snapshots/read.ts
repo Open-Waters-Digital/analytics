@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { siteDailyMetrics, siteSnapshotResults, snapshotRuns } from "@/db/schema";
 import { requireSession } from "@/server/session";
@@ -102,7 +102,13 @@ export async function getSiteSnapshots(siteIds: string[]): Promise<Map<string, S
         daysWritten: siteSnapshotResults.daysWritten,
       })
       .from(siteSnapshotResults)
-      .where(inArray(siteSnapshotResults.siteId, siteIds))
+      // PostHog's results only: search results share the table (add-search-console).
+      .where(
+        and(
+          inArray(siteSnapshotResults.siteId, siteIds),
+          eq(siteSnapshotResults.source, "posthog"),
+        ),
+      )
       .orderBy(siteSnapshotResults.siteId, desc(siteSnapshotResults.createdAt)),
     db
       .select({

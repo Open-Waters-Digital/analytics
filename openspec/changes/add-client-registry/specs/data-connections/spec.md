@@ -141,13 +141,14 @@ connection problem.
 
 A user SHALL be able to record one Search Console property per site, either a
 domain property (`sc-domain:` followed by a hostname) or a URL-prefix property
-(an `https` URL ending in `/`). The property SHALL be shown as "Not checked"
-until a later change adds the check.
+(an `https` URL ending in `/`). Until it is first checked, the property SHALL be
+shown as "Not checked". Checking it, and everything read through it, is the
+`search-performance` capability from `add-search-console`.
 
 #### Scenario: Domain property
 
 - **WHEN** a user enters `sc-domain:radarahealth.com`
-- **THEN** it is stored and shown as "Not checked"
+- **THEN** it is stored, and shown as "Not checked" until its first check
 
 #### Scenario: Invalid property
 

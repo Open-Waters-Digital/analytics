@@ -96,8 +96,13 @@ client's visitor-level data is stored.
     Keys are AES-256-GCM encrypted with the connection id as associated data
     (`src/server/crypto.ts`); the UI shows the last four characters. A blank key
     when replacing reuses the stored one.
-  - **Search Console properties** are stored and shown as "Not checked" until
-    the Search Console pull adds a check.
+  - **Search properties** (`add-search-console`): a Google Search Console
+    property and a Bing Webmaster Tools site per site, each checked when saved
+    and on demand. "No access" covers both "never shared with the Open Waters
+    account" and "not a property", because neither engine tells them apart.
+  - **Replaces an existing site** and **brand terms** are site settings. The
+    first decides whether the first search pull backfills the older site's
+    history; the second marks branded queries, applied when the report is read.
   - **Expected events** default to the whole event list for the site's version,
     less `consent_updated` unless the site has a consent banner. Changing a
     site's version does not change them: adopting a new version is a deliberate
@@ -179,8 +184,36 @@ value_minor, currency`, stored in `site_daily_metrics`. The metric list is
     through `src/server/snapshots/read.ts`.
 - 🟡 **Drift check**: unknown event names and expected events that stopped
   arriving, per site, surfaced on the client page and the overview.
-- 🟡 **Search Console and PageSpeed pulls**: one Open Waters service account and
-  one PageSpeed key for all clients.
+- ✅ **Search pulls** (`add-search-console`, spec `search-performance`). Google
+  Search Console through one Open Waters service account
+  (`analytics-app@open-waters-analytics.iam.gserviceaccount.com`) and Bing
+  Webmaster Tools through one Open Waters account (`analytics@openwaters.digital`),
+  in the nightly job after the PostHog snapshot, into `site_search_daily`.
+  - **Ten days re-pulled every night**, because both engines revise recent
+    figures. A site marked as replacing an existing one backfills once: 16
+    months of Google, about six of Bing, recorded by `backfilled_at` so it never
+    repeats.
+  - **Zeros only inside an engine's coverage.** A day with no data is a zero
+    from the first day the engine has any, and nothing before it, so an engine
+    an old site never used shows "history begins" rather than a cliff.
+  - **Up to 1,000 queries and pages a day**, page addresses without their query
+    strings. Position is stored multiplied by impressions, so averages weight
+    correctly; Bing's site totals carry no position, so Bing's reads "Not
+    reported".
+  - **A weekly indexing pass on Mondays**: the submitted sitemaps, one index
+    level deep, and up to 500 pages a site inspected, never-inspected first.
+  - **The report** on the client page: the last 28 days against the 28 before
+    for each engine and both, branded and non-branded clicks with the share of
+    clicks they cover, the top queries and pages, organic clicks beside organic
+    sessions and enquiries, and the pages Google has not indexed. Google's days
+    are Pacific Time, and the report says so.
+  - Confirmed against the live APIs on 25 September 2026 with nothing shared:
+    tokens, empty site lists, and the refusals for an unshared property. The
+    shape of real search data is confirmed when the first client shares a
+    property (task 9.1).
+- 🟡 **PageSpeed and Core Web Vitals** (`add-page-experience`, proposed): the
+  Chrome UX Report nightly and PageSpeed Insights weekly, with one API key in
+  the same Google Cloud project.
 - 🟡 **Overview**: every client's health and headline trends on one screen.
 
 ### Reports
@@ -206,10 +239,13 @@ Locked. Revisit only if a dependency changes.
    5a. ✅ `add-provisioning`, with the measurement tier and its guard. Added 25
    September 2026 at Alex's request, outside the locked order: it is what the
    client onboarding checklist needs first.
-6. 🟡 Drift check.
-7. 🟡 Search Console and PageSpeed pulls.
-8. 🟡 Overview screen.
-9. 🔵 Report drafts.
+6. ✅ `add-search-console`, Google and Bing. Moved ahead of the drift check on
+   25 September 2026 at Alex's request, because the onboarding checklist asks
+   for both on every site.
+7. 🟡 `add-page-experience`: PageSpeed and Core Web Vitals.
+8. 🟡 Drift check.
+9. 🟡 Overview screen.
+10. 🔵 Report drafts.
 
 ---
 
@@ -235,7 +271,10 @@ Locked. Revisit only if a dependency changes.
 │   ├── server/            Env, auth, session gate, crypto, PostHog queries. Server only
 │   │   ├── registry/      Data access layer for the registry: session check, validation, writes
 │   │   ├── provisioning/  Desired state, diff, the PostHog client, check/apply and the tier guard
-│   │   └── snapshots/     collect.ts runs as the system (the job); read.ts checks the session
+│   │   ├── search-console.ts, bing-webmaster.ts
+│   │   │                  The two engines' clients: fixed messages, never the key
+│   │   └── snapshots/     collect.ts and search.ts run as the system (the job);
+│   │                      read.ts and search-read.ts check the session
 │   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
 │   ├── lib/               Framework-free helpers safe for any module
@@ -391,7 +430,11 @@ outside Next, so `scripts/build-scripts.mjs` bundles each into a self-contained
 **What this app stores:** client and site details, the names and work emails of
 report recipients, encrypted PostHog API keys, **aggregate** daily numbers per
 site, and a record of each provisioning run and of the PostHog dashboard and
-insights it created (ids and contract keys, never setting values).
+insights it created (ids and contract keys, never setting values). From search:
+clicks, impressions and position per day, by device, and for each engine's top
+queries and pages; search queries exactly as the engines report them, which
+are their own anonymised aggregates with rare queries withheld; page addresses
+with their query strings removed; and each sitemap page's index verdict.
 
 **Never stored here:** individual visitor data, session recordings, enquiry
 contents, IP addresses of client-site visitors. The nightly snapshot asks
@@ -434,16 +477,19 @@ settings live in `.railway/railway.ts` (Railway Infrastructure as Code).
 A second Railway service, built from the same repository and the same
 `Dockerfile`, declared in the same `.railway/railway.ts`:
 
-| Setting | Value                                               |
-| ------- | --------------------------------------------------- |
-| Start   | `node dist/jobs/nightly-snapshot.mjs`               |
-| Cron    | `20 3 * * *` (03:20 UTC)                            |
-| Health  | None: the container runs once and exits             |
-| Deploy  | No pre-deploy. Migrations belong to the web service |
-| Vars    | `DATABASE_URL`, `CREDENTIALS_ENCRYPTION_KEY` only   |
+| Setting | Value                                                                 |
+| ------- | --------------------------------------------------------------------- |
+| Start   | `node dist/jobs/nightly-snapshot.mjs`                                 |
+| Cron    | `20 3 * * *` (03:20 UTC)                                              |
+| Health  | None: the container runs once and exits                               |
+| Deploy  | No pre-deploy. Migrations belong to the web service                   |
+| Vars    | `DATABASE_URL`, `CREDENTIALS_ENCRYPTION_KEY`, and the two search keys |
 
 `CREDENTIALS_ENCRYPTION_KEY` must be **the same value** as the web service, or
-stored client keys cannot be decrypted. The job reads `databaseEnv()` and
+stored client keys cannot be decrypted. `GOOGLE_SERVICE_ACCOUNT_KEY` (the
+service account's JSON key, base64) and `BING_WEBMASTER_API_KEY` are set on
+both services too: the web service checks properties, the job pulls them.
+Unset, each engine is dormant. The job reads `databaseEnv()` and
 `credentialsKey()` only, never `env()`, so a missing auth or email variable
 cannot stop the pull.
 

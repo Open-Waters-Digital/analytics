@@ -33,6 +33,31 @@ try {
     );
   }
 
+  for (const result of summary.searchResults) {
+    console.info(
+      JSON.stringify({
+        event: "search_site",
+        source: result.source,
+        site: result.clientSlug,
+        site_id: result.siteId,
+        outcome: result.outcome,
+        reason: result.reason,
+        days: result.daysWritten,
+        ms: result.durationMs,
+      }),
+    );
+  }
+  for (const pass of summary.indexing) {
+    console.info(
+      JSON.stringify({
+        event: "indexing_site",
+        site_id: pass.siteId,
+        inspected: pass.inspected,
+        failed: pass.failed,
+      }),
+    );
+  }
+
   console.info(
     JSON.stringify({
       event: "snapshot_run",

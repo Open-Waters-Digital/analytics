@@ -17,11 +17,17 @@ import {
   deleteSiteChange,
   removeSite,
   saveCommercialContext,
-  saveSearchConsoleProperty,
   setExpectedEvents,
   updateSite,
   updateSiteChange,
 } from "@/server/registry/sites";
+import {
+  checkBingSite,
+  checkSearchConsoleProperty,
+  saveBingSite,
+  saveSearchConsoleProperty,
+  type SearchCheckOutcome,
+} from "@/server/registry/search";
 import { UnauthorisedError } from "@/server/session-policy";
 
 /**
@@ -256,6 +262,13 @@ export async function removePostHogAction(
 
 // ---- Search Console, expected events, commercial context ------------------------
 
+const CHECK_TEXT: Record<SearchCheckOutcome, string> = {
+  readable: "Readable. Data arrives after the next nightly run.",
+  no_access: "Saved, but not shared with the Open Waters account yet. See the note beside it.",
+  check_failed: "Saved. The check could not finish; press Check to try again.",
+  not_configured: "Saved. This engine is not configured on the server yet, so it was not checked.",
+};
+
 export async function saveSearchConsoleAction(
   slug: string,
   siteId: string,
@@ -267,8 +280,34 @@ export async function saveSearchConsoleAction(
     "save Search Console property",
     formData,
     input => saveSearchConsoleProperty(siteId, input),
-    () => ({ message: "Property saved.", keepValues: true }),
+    value => ({ message: CHECK_TEXT[value.check], keepValues: true }),
   );
+}
+
+export async function saveBingSiteAction(
+  slug: string,
+  siteId: string,
+  _: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireSiteOf(slug, siteId);
+  return formMutation(
+    "save Bing site",
+    formData,
+    input => saveBingSite(siteId, input),
+    value => ({ message: CHECK_TEXT[value.check], keepValues: true }),
+  );
+}
+
+/** The Check buttons beside each property: the result shows on the page it returns to. */
+export async function checkSearchConsoleAction(slug: string, siteId: string): Promise<void> {
+  await requireSiteOf(slug, siteId);
+  await buttonMutation("check Search Console property", () => checkSearchConsoleProperty(siteId));
+}
+
+export async function checkBingSiteAction(slug: string, siteId: string): Promise<void> {
+  await requireSiteOf(slug, siteId);
+  await buttonMutation("check Bing site", () => checkBingSite(siteId));
 }
 
 export async function setExpectedEventsAction(

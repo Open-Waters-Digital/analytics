@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   date,
+  doublePrecision,
   index,
   integer,
   pgEnum,
@@ -24,6 +25,81 @@ import { currency, sites } from "./registry-schema";
  */
 
 export const snapshotOutcome = pgEnum("snapshot_outcome", ["ok", "failed", "skipped"]);
+
+/** Which source a per-site result is for (add-search-console, design D6). */
+export const snapshotSource = pgEnum("snapshot_source", [
+  "posthog",
+  "google_search",
+  "bing_search",
+]);
+export const searchEngine = pgEnum("search_engine", ["google", "bing"]);
+export const searchBreakdown = pgEnum("search_breakdown", ["total", "device", "query", "page"]);
+export const indexVerdict = pgEnum("index_verdict", ["indexed", "not_indexed", "unknown"]);
+
+/**
+ * Search performance per site, engine, day and breakdown (add-search-console,
+ * design D4). Aggregates only: a query is the engine's own anonymised
+ * aggregate, and the engines withhold rare ones. Days are the engine's own:
+ * Google's are Pacific Time.
+ */
+export const siteSearchDaily = pgTable(
+  "site_search_daily",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    siteId: uuid()
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    engine: searchEngine().notNull(),
+    day: date({ mode: "string" }).notNull(),
+    breakdown: searchBreakdown().notNull(),
+    /** '' for totals, else the device, query or page, at most 200 characters. */
+    value: text().notNull().default(""),
+    clicks: integer().notNull(),
+    impressions: integer().notNull(),
+    /** Position × impressions, so averages weight correctly across rows. */
+    positionSum: doublePrecision().notNull(),
+    ...timestamps,
+  },
+  table => [
+    unique("site_search_daily_site_engine_day_breakdown_value_unique").on(
+      table.siteId,
+      table.engine,
+      table.day,
+      table.breakdown,
+      table.value,
+    ),
+    index("site_search_daily_site_day_idx").on(table.siteId, table.day.desc()),
+    check(
+      "site_search_daily_non_negative",
+      sql`${table.clicks} >= 0 and ${table.impressions} >= 0 and ${table.positionSum} >= 0`,
+    ),
+    check("site_search_daily_value_length", sql`length(${table.value}) <= 200`),
+  ],
+);
+
+/** The weekly indexing pass's latest verdict per page (design D5b). */
+export const siteIndexStatus = pgTable(
+  "site_index_status",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    siteId: uuid()
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** A public page address with no query string. */
+    address: text().notNull(),
+    verdict: indexVerdict().notNull(),
+    /** Google's own label for the page, such as "Page with redirect". */
+    coverageState: text(),
+    lastCrawlAt: timestamp({ withTimezone: true }),
+    inspectedAt: timestamp({ withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  table => [
+    unique("site_index_status_site_address_unique").on(table.siteId, table.address),
+    index("site_index_status_site_inspected_idx").on(table.siteId, table.inspectedAt),
+    check("site_index_status_address_length", sql`length(${table.address}) <= 500`),
+  ],
+);
 
 export const siteDailyMetrics = pgTable(
   "site_daily_metrics",
@@ -86,6 +162,8 @@ export const siteSnapshotResults = pgTable(
     siteId: uuid()
       .notNull()
       .references(() => sites.id, { onDelete: "cascade" }),
+    /** PostHog, or one of the search engines; every row before search is PostHog's. */
+    source: snapshotSource().notNull().default("posthog"),
     outcome: snapshotOutcome().notNull(),
     /** A fixed message from the app, never PostHog's own error text. */
     reason: text(),
@@ -94,7 +172,11 @@ export const siteSnapshotResults = pgTable(
     ...timestamps,
   },
   table => [
-    unique("site_snapshot_results_run_site_unique").on(table.runId, table.siteId),
+    unique("site_snapshot_results_run_site_source_unique").on(
+      table.runId,
+      table.siteId,
+      table.source,
+    ),
     index("site_snapshot_results_run_id_idx").on(table.runId),
     index("site_snapshot_results_site_created_idx").on(table.siteId, table.createdAt.desc()),
     check(

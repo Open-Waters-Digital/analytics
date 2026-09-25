@@ -107,6 +107,24 @@ export const productionUrl = z
     return url.origin;
   });
 
+/** Brand terms, one per line or comma-separated: trimmed, lowercased, no repeats. */
+export const brandTerms = z
+  .string()
+  .optional()
+  .transform(value => [
+    ...new Set(
+      (value ?? "")
+        .split(/[\n,]/)
+        .map(term => term.trim().toLowerCase())
+        .filter(term => term.length > 0),
+    ),
+  ])
+  .pipe(
+    z
+      .array(z.string().max(50, "Keep each brand term to 50 characters or fewer."))
+      .max(20, "Use at most 20 brand terms."),
+  );
+
 export const measurementTiers = ["essentials", "insights", "growth"] as const;
 
 export const siteSchema = z
@@ -132,6 +150,8 @@ export const siteSchema = z
       .enum(measurementTiers, { error: "Choose a measurement tier." })
       .default("essentials"),
     usesHeatmaps: checkbox,
+    replacesExistingSite: checkbox,
+    brandTerms,
   })
   // The consent banner follows the tier (add-provisioning, design D5a): Insights
   // and Growth mean a banner, Essentials none. It is never set on its own.
@@ -189,6 +209,29 @@ export const searchConsoleSchema = z.object({
         return false;
       }
     }, PROPERTY_HINT),
+});
+
+const BING_HINT =
+  "Use the site's URL as Bing lists it, ending in a slash, like https://www.example.com/.";
+
+export const bingSiteSchema = z.object({
+  siteUrl: z
+    .string({ error: BING_HINT })
+    .trim()
+    .min(1, BING_HINT)
+    .refine(value => {
+      try {
+        const url = new URL(value);
+        return (
+          (url.protocol === "https:" || url.protocol === "http:") &&
+          value.endsWith("/") &&
+          !url.search &&
+          !url.hash
+        );
+      } catch {
+        return false;
+      }
+    }, BING_HINT),
 });
 
 // ---- Expected events ---------------------------------------------------------

@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   clients,
+  bingWebmasterSites,
   posthogConnections,
   reportRecipients,
   searchConsoleProperties,
@@ -40,6 +41,14 @@ export interface PublicPostHogConnection {
   lastCheckMessage: string | null;
 }
 
+export interface SearchPropertyDetail {
+  /** The Search Console property, or the Bing site URL. */
+  value: string;
+  status: "readable" | "no_access" | "check_failed" | null;
+  message: string | null;
+  checkedAt: Date | null;
+}
+
 export interface SiteDetail {
   id: string;
   productionUrl: string;
@@ -59,6 +68,11 @@ export interface SiteDetail {
   timezone: string;
   posthog: PublicPostHogConnection | null;
   searchConsoleProperty: string | null;
+  /** The recorded search properties and their last checks (add-search-console). */
+  searchConsole: SearchPropertyDetail | null;
+  bing: SearchPropertyDetail | null;
+  replacesExistingSite: boolean;
+  brandTerms: string[];
   expectedEvents: string[];
   commercial: {
     leadValueMinor: number | null;
@@ -173,9 +187,9 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
   ]);
 
   const siteIds = siteRows.map(site => site.id);
-  const [connections, properties, expected, commercial, changes] =
+  const [connections, properties, expected, commercial, changes, bingSites] =
     siteIds.length === 0
-      ? [[], [], [], [], []]
+      ? [[], [], [], [], [], []]
       : await Promise.all([
           db
             .select({
@@ -193,6 +207,9 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
             .select({
               siteId: searchConsoleProperties.siteId,
               property: searchConsoleProperties.property,
+              status: searchConsoleProperties.lastCheckStatus,
+              message: searchConsoleProperties.lastCheckMessage,
+              checkedAt: searchConsoleProperties.lastCheckAt,
             })
             .from(searchConsoleProperties)
             .where(inArray(searchConsoleProperties.siteId, siteIds)),
@@ -209,6 +226,16 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
             .from(siteChanges)
             .where(inArray(siteChanges.siteId, siteIds))
             .orderBy(desc(siteChanges.occurredOn), desc(siteChanges.createdAt)),
+          db
+            .select({
+              siteId: bingWebmasterSites.siteId,
+              siteUrl: bingWebmasterSites.siteUrl,
+              status: bingWebmasterSites.lastCheckStatus,
+              message: bingWebmasterSites.lastCheckMessage,
+              checkedAt: bingWebmasterSites.lastCheckAt,
+            })
+            .from(bingWebmasterSites)
+            .where(inArray(bingWebmasterSites.siteId, siteIds)),
         ]);
 
   const confirmerIds = siteRows
@@ -255,6 +282,30 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
           }
         : null,
       searchConsoleProperty: properties.find(row => row.siteId === site.id)?.property ?? null,
+      searchConsole: (() => {
+        const row = properties.find(candidate => candidate.siteId === site.id);
+        return row
+          ? {
+              value: row.property,
+              status: row.status,
+              message: row.message,
+              checkedAt: row.checkedAt,
+            }
+          : null;
+      })(),
+      bing: (() => {
+        const row = bingSites.find(candidate => candidate.siteId === site.id);
+        return row
+          ? {
+              value: row.siteUrl,
+              status: row.status,
+              message: row.message,
+              checkedAt: row.checkedAt,
+            }
+          : null;
+      })(),
+      replacesExistingSite: site.replacesExistingSite,
+      brandTerms: site.brandTerms,
       expectedEvents: expected.filter(row => row.siteId === site.id).map(row => row.event),
       commercial: context
         ? {

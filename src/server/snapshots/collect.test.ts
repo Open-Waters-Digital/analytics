@@ -451,11 +451,21 @@ describe("runNightlySnapshot", () => {
           inArray(siteSnapshotResults.siteId, [ok.siteId, skipped.siteId]),
         ),
       );
-    expect(results).toHaveLength(2);
-    expect(results.find(result => result.siteId === ok.siteId)?.outcome).toBe("ok");
-    expect(results.find(result => result.siteId === skipped.siteId)?.reason).toBe(
+    // One PostHog result per site, and one per search engine beside it.
+    const posthog = results.filter(result => result.source === "posthog");
+    expect(posthog).toHaveLength(2);
+    expect(posthog.find(result => result.siteId === ok.siteId)?.outcome).toBe("ok");
+    expect(posthog.find(result => result.siteId === skipped.siteId)?.reason).toBe(
       SNAPSHOT_MESSAGES.noConnection,
     );
+    const search = results.filter(result => result.source !== "posthog");
+    expect(search.map(result => result.source).sort()).toEqual([
+      "bing_search",
+      "bing_search",
+      "google_search",
+      "google_search",
+    ]);
+    expect(search.every(result => result.outcome === "skipped")).toBe(true);
   });
 
   it("deletes run history older than ninety days", async () => {

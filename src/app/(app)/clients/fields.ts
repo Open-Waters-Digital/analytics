@@ -118,6 +118,20 @@ export function siteFields(site?: SiteDetail): FieldSpec[] {
       defaultChecked: site?.usesHeatmaps ?? false,
     },
     {
+      kind: "checkbox",
+      name: "replacesExistingSite",
+      label: "Replaces an existing site",
+      hint: "Tick when this site took over an older site's domain. Its first search pull fetches the older site's history, and reports label it Previous site.",
+      defaultChecked: site?.replacesExistingSite ?? false,
+    },
+    {
+      kind: "textarea",
+      name: "brandTerms",
+      label: "Brand terms",
+      hint: "Words that make a search branded, one per line, such as the client's name. Up to 20.",
+      defaultValue: (site?.brandTerms ?? []).join("\n"),
+    },
+    {
       kind: "text",
       name: "timezone",
       label: "Timezone",
@@ -163,6 +177,18 @@ export function searchConsoleFields(site: SiteDetail): FieldSpec[] {
       label: "Search Console property",
       hint: "sc-domain:example.com or https://example.com/",
       defaultValue: site.searchConsoleProperty ?? "",
+    },
+  ];
+}
+
+export function bingSiteFields(site: SiteDetail): FieldSpec[] {
+  return [
+    {
+      kind: "url",
+      name: "siteUrl",
+      label: "Bing site",
+      hint: "As Bing Webmaster Tools lists it, like https://www.example.com/",
+      defaultValue: site.bing?.value ?? "",
     },
   ];
 }

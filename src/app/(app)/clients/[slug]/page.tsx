@@ -32,6 +32,7 @@ import {
   TIER_LABELS,
 } from "@/lib/registry-labels";
 import { latestProvisioningRuns, type LatestRun } from "@/server/provisioning";
+import { getSearchReports, type Headline, type SearchReport } from "@/server/snapshots/search-read";
 import { REQUIRED_SCOPES } from "@/server/provisioning/posthog-fields";
 import { getClientDetail, type ClientDetail, type SiteDetail } from "@/server/registry/clients";
 import {
@@ -47,6 +48,9 @@ import {
   removeRecipientAction,
   saveCommercialAction,
   savePostHogAction,
+  checkBingSiteAction,
+  checkSearchConsoleAction,
+  saveBingSiteAction,
   saveSearchConsoleAction,
   setExpectedEventsAction,
   testPostHogAction,
@@ -55,6 +59,7 @@ import {
   commercialFields,
   posthogFields,
   recipientFields,
+  bingSiteFields,
   searchConsoleFields,
   siteChangeFields,
 } from "../fields";
@@ -73,9 +78,10 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
   if (!client) notFound();
 
   const siteIds = client.sites.map(site => site.id);
-  const [snapshots, runs] = await Promise.all([
+  const [snapshots, runs, searches] = await Promise.all([
     getSiteSnapshots(siteIds),
     latestProvisioningRuns(siteIds),
+    getSearchReports(siteIds),
   ]);
 
   return (
@@ -130,6 +136,7 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
             site={site}
             snapshot={snapshots.get(site.id) ?? null}
             lastRun={runs.get(site.id) ?? null}
+            search={searches.get(site.id) ?? null}
           />
         ))
       )}
@@ -144,11 +151,13 @@ function SitePanel({
   site,
   snapshot,
   lastRun,
+  search,
 }: {
   client: ClientDetail;
   site: SiteDetail;
   snapshot: SiteSnapshot | null;
   lastRun: LatestRun | null;
+  search: SearchReport | null;
 }) {
   const slug = client.slug;
   const clientOwned = client.analyticsOwnership === "client_owned";
@@ -260,23 +269,8 @@ function SitePanel({
             <SnapshotSummary snapshot={snapshot} connected={site.posthog !== null} />
           </SubSection>
 
-          <SubSection title="Search Console">
-            <p className="text-data">
-              {site.searchConsoleProperty ? (
-                <>
-                  <code>{site.searchConsoleProperty}</code> <Muted>· Not checked</Muted>
-                </>
-              ) : (
-                <Muted>No property recorded</Muted>
-              )}
-            </p>
-            <Disclosure summary={site.searchConsoleProperty ? "Change property" : "Add property"}>
-              <RegistryForm
-                action={saveSearchConsoleAction.bind(null, slug, site.id)}
-                fields={searchConsoleFields(site)}
-                submitLabel="Save property"
-              />
-            </Disclosure>
+          <SubSection title="Search">
+            <SearchSection slug={slug} site={site} report={search} />
           </SubSection>
 
           <SubSection title="Expected events">
@@ -683,6 +677,270 @@ function ProjectSection({
       </Disclosure>
 
       <ProvisioningPanel action={provisioningAction.bind(null, site.id)} scopes={REQUIRED_SCOPES} />
+    </div>
+  );
+}
+
+const SEARCH_STATUS: Record<
+  "readable" | "no_access" | "check_failed",
+  { tone: "success" | "warning" | "danger"; label: string }
+> = {
+  readable: { tone: "success", label: "Readable" },
+  no_access: { tone: "warning", label: "No access" },
+  check_failed: { tone: "danger", label: "Check failed" },
+};
+
+function PropertyLine({
+  label,
+  property,
+  check,
+}: {
+  label: string;
+  property: SiteDetail["searchConsole"];
+  check: () => Promise<void>;
+}) {
+  if (!property) {
+    return (
+      <p className="text-data">
+        {label}: <Muted>not recorded</Muted>
+      </p>
+    );
+  }
+  const status = property.status ? SEARCH_STATUS[property.status] : null;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2 text-data">
+        <span>{label}:</span>
+        <code className="break-all">{property.value}</code>
+        {status ? (
+          <StatusDot tone={status.tone} label={status.label} />
+        ) : (
+          <Muted>Not checked</Muted>
+        )}
+        {property.checkedAt ? <Muted>· {formatDateTime(property.checkedAt)}</Muted> : null}
+        <form action={check}>
+          <Button type="submit" variant="ghost" size="sm">
+            Check
+          </Button>
+        </form>
+      </div>
+      {property.message && property.status !== "readable" ? (
+        <Alert tone={property.status === "no_access" ? "warning" : "danger"}>
+          {property.message}
+        </Alert>
+      ) : null}
+    </div>
+  );
+}
+
+const number = (value: number) => new Intl.NumberFormat("en-GB").format(value);
+const percent = (value: number | null) =>
+  value === null
+    ? "–"
+    : new Intl.NumberFormat("en-GB", { style: "percent", maximumFractionDigits: 1 }).format(value);
+const position = (value: number | null) => (value === null ? "Not reported" : value.toFixed(1));
+
+function change(current: number, previous: number): string {
+  if (previous === 0) return current === 0 ? "no change" : "new";
+  const delta = (current - previous) / previous;
+  return `${delta >= 0 ? "+" : ""}${new Intl.NumberFormat("en-GB", { style: "percent", maximumFractionDigits: 0 }).format(delta)}`;
+}
+
+function HeadlineRow({
+  label,
+  current,
+  previous,
+}: {
+  label: string;
+  current: Headline;
+  previous: Headline;
+}) {
+  return (
+    <Tr>
+      <Td className="font-medium">{label}</Td>
+      <Td className="text-right tabular-nums">
+        {number(current.clicks)} <Muted>{change(current.clicks, previous.clicks)}</Muted>
+      </Td>
+      <Td className="text-right tabular-nums">{number(current.impressions)}</Td>
+      <Td className="hidden text-right tabular-nums md:table-cell">{percent(current.ctr)}</Td>
+      <Td className="hidden text-right tabular-nums md:table-cell">{position(current.position)}</Td>
+    </Tr>
+  );
+}
+
+function TopList({ title, rows }: { title: string; rows: SearchReport["topQueries"] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h4 className="text-data font-medium">{title}</h4>
+      <Table>
+        <thead>
+          <tr>
+            <Th>{title === "Top queries" ? "Query" : "Page"}</Th>
+            <Th className="text-right">Clicks</Th>
+            <Th className="text-right">Impressions</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <Tr key={row.value}>
+              <Td className="break-all">{row.value}</Td>
+              <Td className="text-right tabular-nums">{number(row.clicks)}</Td>
+              <Td className="text-right tabular-nums">{number(row.impressions)}</Td>
+            </Tr>
+          ))}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
+function SearchSection({
+  slug,
+  site,
+  report,
+}: {
+  slug: string;
+  site: SiteDetail;
+  report: SearchReport | null;
+}) {
+  const hasData =
+    report !== null &&
+    (report.combined.current.impressions > 0 || report.combined.previous.impressions > 0);
+  const readable = site.searchConsole?.status === "readable" || site.bing?.status === "readable";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PropertyLine
+        label="Google"
+        property={site.searchConsole}
+        check={checkSearchConsoleAction.bind(null, slug, site.id)}
+      />
+      <PropertyLine
+        label="Bing"
+        property={site.bing}
+        check={checkBingSiteAction.bind(null, slug, site.id)}
+      />
+
+      {report && hasData ? (
+        <div className="flex flex-col gap-4">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Last 28 days</Th>
+                <Th className="text-right">Clicks</Th>
+                <Th className="text-right">Impressions</Th>
+                <Th className="hidden text-right md:table-cell">Click-through</Th>
+                <Th className="hidden text-right md:table-cell">Position</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.google ? (
+                <HeadlineRow
+                  label="Google"
+                  current={report.google.current}
+                  previous={report.google.previous}
+                />
+              ) : null}
+              {report.bing ? (
+                <HeadlineRow
+                  label="Bing"
+                  current={report.bing.current}
+                  previous={report.bing.previous}
+                />
+              ) : null}
+              <HeadlineRow
+                label="Both"
+                current={report.combined.current}
+                previous={report.combined.previous}
+              />
+            </tbody>
+          </Table>
+          <p className="text-caption text-ink-muted">
+            {formatDate(report.period.from)} to {formatDate(report.period.to)}, against the 28 days
+            before. Google&apos;s days are Pacific Time, eight hours behind the UK.
+            {report.google?.historyBegins
+              ? ` Google history begins ${formatDate(report.google.historyBegins)}.`
+              : ""}
+            {report.bing?.historyBegins
+              ? ` Bing history begins ${formatDate(report.bing.historyBegins)}.`
+              : ""}
+            {report.previousSiteUntil
+              ? ` Figures before ${formatDate(report.previousSiteUntil)} are the previous site's.`
+              : ""}
+          </p>
+
+          <DescriptionList
+            items={[
+              {
+                term: "Search to enquiry",
+                value: `${number(report.searchToEnquiry.organicClicks)} clicks → ${number(report.searchToEnquiry.organicSessions)} organic sessions → ${number(report.searchToEnquiry.organicLeads)} enquiries`,
+              },
+              {
+                term: "Branded",
+                value: report.branded ? (
+                  `${number(report.branded.branded)} branded, ${number(report.branded.nonBranded)} non-branded clicks${report.branded.coverage === null ? "" : `, based on ${percent(report.branded.coverage)} of clicks`}`
+                ) : (
+                  <Muted>Add brand terms to the site to split branded searches out</Muted>
+                ),
+              },
+            ]}
+          />
+
+          <TopList title="Top queries" rows={report.topQueries} />
+          <TopList title="Top pages" rows={report.topPages} />
+        </div>
+      ) : (
+        <p className="text-data">
+          <Muted>
+            {!site.searchConsole && !site.bing
+              ? "Record a Search Console property or a Bing site to see search data."
+              : readable
+                ? "Search data arrives after the next nightly run."
+                : "Search data appears once a property is readable."}
+          </Muted>
+        </p>
+      )}
+
+      {report?.indexing ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-data">
+            Indexing: {report.indexing.indexed} of {report.indexing.inspected} sitemap pages indexed
+            by Google.
+          </p>
+          {report.indexing.notIndexed.length > 0 ? (
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-data">
+              {report.indexing.notIndexed.slice(0, 20).map(page => (
+                <li key={page.address} className="break-all">
+                  {page.address}
+                  {page.coverageState ? <Muted> · {page.coverageState}</Muted> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-2">
+        <Disclosure
+          summary={
+            site.searchConsole ? "Change Search Console property" : "Add Search Console property"
+          }
+        >
+          <RegistryForm
+            action={saveSearchConsoleAction.bind(null, slug, site.id)}
+            fields={searchConsoleFields(site)}
+            submitLabel="Save and check"
+          />
+        </Disclosure>
+        <Disclosure summary={site.bing ? "Change Bing site" : "Add Bing site"}>
+          <RegistryForm
+            action={saveBingSiteAction.bind(null, slug, site.id)}
+            fields={bingSiteFields(site)}
+            submitLabel="Save and check"
+          />
+        </Disclosure>
+      </div>
     </div>
   );
 }

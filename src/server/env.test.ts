@@ -1,5 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { parseDatabaseEnv, parseEnv } from "./env";
+import {
+  MissingConfigurationError,
+  parseDatabaseEnv,
+  parseEnv,
+  parseGoogleServiceAccount,
+} from "./env";
+
+describe("parseGoogleServiceAccount", () => {
+  const privateKey = "-----BEGIN PRIVATE KEY-----\nMIIsecretmaterial\n-----END PRIVATE KEY-----\n";
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64");
+  const valid = {
+    type: "service_account",
+    client_email: "analytics-app@open-waters-analytics.iam.gserviceaccount.com",
+    private_key: privateKey,
+    private_key_id: "abc",
+  };
+
+  it("reads the email and key from the base64 JSON", () => {
+    expect(parseGoogleServiceAccount(encode(valid))).toEqual({
+      clientEmail: valid.client_email,
+      privateKey,
+    });
+  });
+
+  it("treats unset as not configured", () => {
+    expect(parseGoogleServiceAccount(undefined)).toBeNull();
+    expect(parseGoogleServiceAccount("")).toBeNull();
+  });
+
+  it.each([
+    ["not base64 JSON", "not-json-at-all"],
+    ["a JSON object missing the private key", encode({ ...valid, private_key: undefined })],
+    ["a key of another type", encode({ ...valid, type: "authorized_user" })],
+  ])("refuses %s, naming the variable and never the value", (_label, value) => {
+    let thrown: unknown;
+    try {
+      parseGoogleServiceAccount(value);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(MissingConfigurationError);
+    const message = (thrown as Error).message;
+    expect(message).toContain("GOOGLE_SERVICE_ACCOUNT_KEY");
+    expect(message).not.toContain("secretmaterial");
+    expect(message).not.toContain(value.slice(0, 12));
+  });
+});
 
 describe("parseDatabaseEnv", () => {
   // The pre-deploy migration must not fail because an unrelated secret is unset.

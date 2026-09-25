@@ -113,6 +113,55 @@ export function parseDatabaseEnv(source: Record<string, string | undefined>): Da
   return parseWith(databaseSchema, source);
 }
 
+/**
+ * The Open Waters Google service account that reads every client's Search
+ * Console property (add-search-console, design D3). Unset means Search Console
+ * is not configured, and the feature is dormant. Set but malformed is a
+ * configuration error, never "not configured", so a typo cannot quietly switch
+ * the feature off. Base64 of the JSON key file, so it survives an env editor.
+ */
+export interface GoogleServiceAccount {
+  clientEmail: string;
+  privateKey: string;
+}
+
+const googleKeySchema = z.object({
+  type: z.literal("service_account"),
+  client_email: z.email(),
+  private_key: z.string().includes("PRIVATE KEY"),
+});
+
+export function parseGoogleServiceAccount(value: string | undefined): GoogleServiceAccount | null {
+  if (!value) return null;
+  const error = new MissingConfigurationError(
+    "Invalid environment variables: GOOGLE_SERVICE_ACCOUNT_KEY",
+  );
+  let json: unknown;
+  try {
+    json = JSON.parse(Buffer.from(value, "base64").toString("utf8"));
+  } catch {
+    throw error;
+  }
+  const result = googleKeySchema.safeParse(json);
+  if (!result.success) throw error;
+  return { clientEmail: result.data.client_email, privateKey: result.data.private_key };
+}
+
+let cachedGoogle: GoogleServiceAccount | null | undefined;
+
+export function googleServiceAccount(): GoogleServiceAccount | null {
+  if (cachedGoogle === undefined) {
+    cachedGoogle = parseGoogleServiceAccount(process.env["GOOGLE_SERVICE_ACCOUNT_KEY"]);
+  }
+  return cachedGoogle;
+}
+
+/** The Open Waters Bing Webmaster Tools account's API key. Unset: Bing is dormant. */
+export function bingWebmasterApiKey(): string | null {
+  const value = process.env["BING_WEBMASTER_API_KEY"]?.trim();
+  return value ? value : null;
+}
+
 function parseWith<T>(target: z.ZodType<T>, source: Record<string, string | undefined>): T {
   const result = target.safeParse(source);
   if (!result.success) {

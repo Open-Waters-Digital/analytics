@@ -44,6 +44,12 @@ export const currency = pgEnum("currency", ["GBP", "EUR", "USD"]);
 export const figureSource = pgEnum("figure_source", ["client_confirmed", "open_waters_estimate"]);
 /** The contract package's measurement tiers (add-provisioning, design D5a). */
 export const measurementTier = pgEnum("measurement_tier", ["essentials", "insights", "growth"]);
+/** A search property's last check (add-search-console, design D7). */
+export const searchCheckStatus = pgEnum("search_check_status", [
+  "readable",
+  "no_access",
+  "check_failed",
+]);
 export const siteChangeKind = pgEnum("site_change_kind", [
   "launch",
   "design",
@@ -93,6 +99,14 @@ export const sites = pgTable(
     tierConfirmedFor: measurementTier(),
     tierConfirmedAt: timestamp({ withTimezone: true }),
     tierConfirmedBy: uuid().references(() => users.id, { onDelete: "set null" }),
+    // A site that took over an older site's domain: its first search pull
+    // backfills, and reports label the older data "Previous site".
+    replacesExistingSite: boolean().notNull().default(false),
+    // Words that mark a search query as branded, lowercased. Applied when read.
+    brandTerms: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     ...timestamps,
   },
   table => [
@@ -149,6 +163,27 @@ export const searchConsoleProperties = pgTable("search_console_properties", {
     .unique()
     .references(() => sites.id, { onDelete: "cascade" }),
   property: text().notNull(),
+  lastCheckAt: timestamp({ withTimezone: true }),
+  lastCheckStatus: searchCheckStatus(),
+  lastCheckMessage: text(),
+  /** When a replacement site's history was backfilled from this engine. */
+  backfilledAt: timestamp({ withTimezone: true }),
+  ...timestamps,
+});
+
+/** The site as Bing Webmaster Tools lists it, and its last check. */
+export const bingWebmasterSites = pgTable("bing_webmaster_sites", {
+  id: uuid().primaryKey().defaultRandom(),
+  siteId: uuid()
+    .notNull()
+    .unique()
+    .references(() => sites.id, { onDelete: "cascade" }),
+  siteUrl: text().notNull(),
+  lastCheckAt: timestamp({ withTimezone: true }),
+  lastCheckStatus: searchCheckStatus(),
+  lastCheckMessage: text(),
+  /** When a replacement site's history was backfilled from this engine. */
+  backfilledAt: timestamp({ withTimezone: true }),
   ...timestamps,
 });
 

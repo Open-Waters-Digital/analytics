@@ -14,12 +14,12 @@ import {
   deleteSiteChange,
   removeSite,
   saveCommercialContext,
-  saveSearchConsoleProperty,
   setExpectedEvents,
   updateSite,
   updateSiteChange,
 } from "./sites";
 import { toMinorUnits } from "./schemas";
+import { saveSearchConsoleProperty } from "./search";
 
 vi.mock("@/server/session", () => import("@/test/mock-session"));
 

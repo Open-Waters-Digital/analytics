@@ -55,6 +55,27 @@ measurement tier: Insights and Growth have one, Essentials does not. Only such a
 site is expected to send `consent_updated`, and only its page views are worth
 reading by `ad_consent`.
 
+**Search property**
+A site's Google Search Console property (`sc-domain:example.com` or a URL
+prefix) or its Bing Webmaster Tools site. Read by one Open Waters account per
+engine, which the client adds as a read-only user. **No access** means the
+property was never shared with that account or does not exist: neither engine
+tells the two apart.
+
+**Replacement site**
+A site that took over an older site's domain. Its first search pull backfills
+the older site's history, and reports label the data before its launch date
+**Previous site**. A new site has no history to fetch.
+
+**Brand terms**
+Words that mark a search query as branded, such as the client's name. The
+branded split always says what share of clicks it covers, because the engines
+do not name every query.
+
+**Indexing pass**
+The weekly inspection of a site's sitemap pages with Google, recording which
+are indexed and, for those that are not, Google's reason.
+
 **Provisioning**
 Bringing a site's PostHog project to the settings and baseline dashboard the
 contract and the registry require. A **provisioning check** lists the

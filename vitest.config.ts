@@ -23,7 +23,13 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.ts"],
     globalSetup: ["./src/test/global-setup.ts"],
-    env: { DATABASE_URL: urls.test },
+    env: {
+      DATABASE_URL: urls.test,
+      // Never the real search credentials from a developer's shell: a test that
+      // records a property must not reach Google or Bing.
+      GOOGLE_SERVICE_ACCOUNT_KEY: "",
+      BING_WEBMASTER_API_KEY: "",
+    },
     /*
      * One file at a time. Every file shares the one test database, and the
      * nightly snapshot pulls every site in it, not only the sites its own tests

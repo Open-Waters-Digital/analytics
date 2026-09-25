@@ -48,6 +48,10 @@ export default defineRailway(() => {
       // Packages. A token with read:packages only; the Dockerfile keeps it in
       // the deps stage.
       NODE_AUTH_TOKEN: preserve(),
+      // Search Console and Bing (add-search-console). Unset leaves each engine
+      // dormant. The Google key is the service account's JSON, base64.
+      GOOGLE_SERVICE_ACCOUNT_KEY: preserve(),
+      BING_WEBMASTER_API_KEY: preserve(),
     },
   });
 
@@ -73,6 +77,9 @@ export default defineRailway(() => {
       DATABASE_URL: preserve(),
       CREDENTIALS_ENCRYPTION_KEY: preserve(),
       NODE_AUTH_TOKEN: preserve(), // Build argument, as on the web service.
+      // The nightly search pull runs here, so it needs both search credentials.
+      GOOGLE_SERVICE_ACCOUNT_KEY: preserve(),
+      BING_WEBMASTER_API_KEY: preserve(),
     },
   });
 

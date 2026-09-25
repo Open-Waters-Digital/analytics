@@ -249,19 +249,28 @@ level is `siteOwner`, `siteFullUser` or `siteRestrictedUser`.
 `siteUnverifiedUser` counts as "No access": the property exists but the account
 cannot read its data.
 
-| Google says                  | Stored status  | Nightly pull                                      |
-| ---------------------------- | -------------- | ------------------------------------------------- |
-| A readable permission level  | `readable`     | Pulled                                            |
-| 403, or `siteUnverifiedUser` | `no_access`    | Skipped until a check passes                      |
-| 404                          | `not_found`    | Skipped until a check passes                      |
-| Timeout, 5xx, network error  | `check_failed` | Pulled, since an outage says nothing about access |
-| Not yet checked              | null           | Pulled, and the pull sets the status              |
+| Google says                       | Stored status  | Nightly pull                                      |
+| --------------------------------- | -------------- | ------------------------------------------------- |
+| A readable permission level       | `readable`     | Pulled                                            |
+| 403, 404, or `siteUnverifiedUser` | `no_access`    | Skipped until a check passes                      |
+| Timeout, 5xx, network error       | `check_failed` | Pulled, since an outage says nothing about access |
+| Not yet checked                   | null           | Pulled, and the pull sets the status              |
 
 A pull that gets a 403 sets the property to `no_access`, so a client removing
 access stops the nightly attempts without anyone editing the registry.
 
-Bing's check asks for the sites the Open Waters account can see and looks for
-the recorded URL. Listed means `readable`; not listed means `no_access`, since
+**There is no "not found" status.** The first draft had one for a 404. Checked
+on 25 September 2026, `GET sites/{siteUrl}` answers 404, "not a verified Search
+Console site in this account", for a property that exists but was never
+shared, so a 404 cannot mean "does not exist". Both engines report the two
+cases the same way, so the app reports them as one: "No access", worded as not
+shared with the Open Waters account, or not a property. The line of guidance
+covers both: check the property name, and add the account.
+
+Bing's check asks for the sites the Open Waters account can see
+(`GetUserSites`, `{"d": [...]}`) and looks for the recorded URL. A statistics
+call for a site the account cannot see answers HTTP 400 with `ErrorCode` 14,
+"NotAuthorized", which the pull reads as `no_access`. Listed means `readable`; not listed means `no_access`, since
 Bing's API cannot tell "not shared" from "does not exist". An invalid key is a
 configuration error for every Bing site, not `no_access` for each.
 
@@ -300,7 +309,9 @@ split, so nobody reads a partial split as the whole.
 For the same 28 days, the report places:
 
 - organic search clicks, from `site_search_daily` totals
-- page views with channel `organic_search`, from `site_daily_metrics`
+- sessions whose channel type is `Organic Search`, from `site_daily_metrics`
+  `sessions_by_channel`. The snapshot keeps sessions by channel, not page
+  views by channel, and a session is the closer match to a click anyway
 - `lead_submitted` with channel `organic_search`, from `site_daily_metrics`
 
 Google's days are Pacific Time and the other two are in the site's timezone. A

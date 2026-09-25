@@ -16,7 +16,6 @@ import {
   commercialContextSchema,
   expectedEventsSchema,
   removeSchema,
-  searchConsoleSchema,
   siteChangeSchema,
   siteSchema,
 } from "./schemas";
@@ -152,21 +151,6 @@ export async function removeSite(siteId: string, input: unknown): Promise<Result
   if (!parsed.success) return formError("Confirm before removing the site.");
 
   await getDb().delete(sites).where(eq(sites.id, siteId));
-  return ok();
-}
-
-export async function saveSearchConsoleProperty(siteId: string, input: unknown): Promise<Result> {
-  await requireSession();
-  const parsed = searchConsoleSchema.safeParse(input);
-  if (!parsed.success) return fromZodError(parsed.error);
-
-  await getDb()
-    .insert(searchConsoleProperties)
-    .values({ siteId, property: parsed.data.property })
-    .onConflictDoUpdate({
-      target: searchConsoleProperties.siteId,
-      set: { property: parsed.data.property, updatedAt: new Date() },
-    });
   return ok();
 }
 
