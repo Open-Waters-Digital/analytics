@@ -10,6 +10,7 @@ import {
   siteCommercialContext,
   siteExpectedEvents,
   sites,
+  users,
 } from "@/db/schema";
 import { requireSession } from "@/server/session";
 import { fieldError, formError, fromZodError, isUniqueViolation, ok, type Result } from "./result";
@@ -47,6 +48,14 @@ export interface SiteDetail {
   launchedOn: string | null;
   taxonomyVersion: number;
   hasConsentBanner: boolean;
+  measurementTier: "essentials" | "insights" | "growth";
+  usesHeatmaps: boolean;
+  /** The guard on the higher tiers: which tier was confirmed, when and by whom. */
+  tierConfirmation: {
+    tier: "essentials" | "insights" | "growth";
+    at: Date;
+    byEmail: string | null;
+  } | null;
   timezone: string;
   posthog: PublicPostHogConnection | null;
   searchConsoleProperty: string | null;
@@ -202,6 +211,17 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
             .orderBy(desc(siteChanges.occurredOn), desc(siteChanges.createdAt)),
         ]);
 
+  const confirmerIds = siteRows
+    .map(site => site.tierConfirmedBy)
+    .filter((id): id is string => id !== null);
+  const confirmers =
+    confirmerIds.length === 0
+      ? []
+      : await db
+          .select({ id: users.id, email: users.email })
+          .from(users)
+          .where(inArray(users.id, confirmerIds));
+
   const siteDetails: SiteDetail[] = siteRows.map(site => {
     const connection = connections.find(row => row.siteId === site.id);
     const context = commercial.find(row => row.siteId === site.id);
@@ -213,6 +233,16 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
       launchedOn: site.launchedOn,
       taxonomyVersion: site.taxonomyVersion,
       hasConsentBanner: site.hasConsentBanner,
+      measurementTier: site.measurementTier,
+      usesHeatmaps: site.usesHeatmaps,
+      tierConfirmation:
+        site.tierConfirmedFor && site.tierConfirmedAt
+          ? {
+              tier: site.tierConfirmedFor,
+              at: site.tierConfirmedAt,
+              byEmail: confirmers.find(user => user.id === site.tierConfirmedBy)?.email ?? null,
+            }
+          : null,
       timezone: site.timezone,
       posthog: connection
         ? {

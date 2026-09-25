@@ -17,7 +17,8 @@ The required settings are:
 - cookieless server hash mode on
 - the site's timezone
 - client IP data discarded
-- session recording off
+- session recording as the site's measurement tier requires, under the
+  "Measurement tier" requirement
 - heatmaps matching the site's `uses_heatmaps` flag: off unless the site is
   marked as using aggregate heatmaps
 - the authorised URLs equal to the site's production origin
@@ -42,6 +43,68 @@ The required settings are:
 - **WHEN** the project's internal-traffic filter excludes the production host
 - **THEN** the check lists it as a difference, explaining that it hides every
   event
+
+### Requirement: Measurement tier
+
+Each site SHALL have a measurement tier of Essentials, Insights or Growth,
+defaulting to Essentials, set by a signed-in partner on the site form. The tier
+SHALL decide whether the site has a consent banner: Insights and Growth mean
+one, Essentials means none, and the expected events SHALL follow as they do for
+the banner today. For the project settings, Essentials SHALL require session
+recording off; Insights and Growth SHALL require session recording allowed with
+every input masked, subject to the guard.
+
+#### Scenario: A new site
+
+- **WHEN** a partner creates a site
+- **THEN** its tier is Essentials, it has no consent banner, and its expected
+  events do not include `consent_updated`
+
+#### Scenario: Moving to Insights
+
+- **WHEN** a partner changes a site from Essentials to Insights
+- **THEN** the site is marked as having a consent banner, `consent_updated` is
+  added to its expected events, and nothing else in its expected events changes
+
+#### Scenario: Moving back to Essentials
+
+- **WHEN** a partner changes a site from Growth to Essentials and applies
+- **THEN** session recording is switched off in the project, with no
+  confirmation asked for
+
+### Requirement: The guard on higher tiers
+
+For a site at Insights or Growth, Apply SHALL NOT allow session recording until a
+partner has confirmed, for that site's current tier, that the consent banner is
+live on the production site and that the privacy page names the tools the tier
+adds. The confirmation SHALL record the partner, the time and the tier. Changing
+the tier SHALL clear it. Until the tier is confirmed, Check SHALL list the
+tier's settings as held until the tier is confirmed, and Apply SHALL converge
+every other setting and leave session recording off. The panel SHALL list the
+work the tier needs on the client's site, which provisioning does not do.
+
+#### Scenario: Tier set, not confirmed
+
+- **WHEN** a partner sets a site to Insights and applies without confirming
+- **THEN** every other difference is applied, session recording stays off, and
+  the panel shows recording as held until the tier is confirmed
+
+#### Scenario: Tier confirmed
+
+- **WHEN** a partner confirms the Insights tier and applies
+- **THEN** session recording is allowed with inputs masked, and the run record
+  shows the apply
+
+#### Scenario: Confirmation cleared by a change
+
+- **WHEN** a site confirmed at Insights is moved to Growth
+- **THEN** the confirmation is cleared, and recording stays as it was until the
+  Growth tier is confirmed and applied
+
+#### Scenario: Confirming while signed out
+
+- **WHEN** the confirm action is called without a session
+- **THEN** it is rejected and nothing is recorded
 
 ### Requirement: Apply converges, and a second run changes nothing
 

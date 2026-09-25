@@ -27,6 +27,13 @@ export const FRAMEWORK_LABELS = { astro: "Astro", next: "Next.js", other: "Other
 
 export const REGION_LABELS = { eu: "EU", us: "US" } as const;
 
+/** The contract package's measurement tiers. */
+export const TIER_LABELS = {
+  essentials: "Essentials",
+  insights: "Insights",
+  growth: "Growth",
+} as const;
+
 export const SOURCE_LABELS = {
   client_confirmed: "Client confirmed",
   open_waters_estimate: "Open Waters estimate",

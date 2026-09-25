@@ -99,10 +99,14 @@ client's visitor-level data is stored.
   - **Search Console properties** are stored and shown as "Not checked" until
     the Search Console pull adds a check.
   - **Expected events** default to the whole event list for the site's version,
-    less `consent_updated` unless the site is marked **has a consent banner**.
-    Changing a site's version does not change them: adopting a new version is a
-    deliberate step. Marking or unmarking the banner adds or removes exactly
+    less `consent_updated` unless the site has a consent banner. Changing a
+    site's version does not change them: adopting a new version is a deliberate
+    step. Gaining or losing the banner adds or removes exactly
     `consent_updated`, and nothing else.
+  - **Each site has a measurement tier**, Essentials, Insights or Growth
+    (`add-provisioning`), and the tier decides the consent banner: Insights and
+    Growth have one. The banner is never set on its own. Aggregate heatmaps are
+    a separate choice, allowed at every tier.
   - **The event list comes from the contract package**,
     `@open-waters-digital/analytics/contract` (`adopt-the-contract-package`).
     `src/lib/event-list.ts` only maps its shape onto this app's; no event list
@@ -113,6 +117,34 @@ client's visitor-level data is stored.
     first and returns field errors as values. Forms are all
     `src/components/registry/registry-form.tsx` driven by field lists in
     `src/app/(app)/clients/fields.ts`.
+
+### Provisioning
+
+- ✅ **PostHog project provisioning** (`add-provisioning`, spec
+  `project-provisioning`). The site's "PostHog project" panel checks the project
+  against the contract and the registry, and applies the differences:
+  cookieless server hash mode, the timezone, IP discarding, session recording
+  by tier, heatmaps, the authorised URL, any internal-traffic condition that
+  hides the production site, and the baseline dashboard with its insights. A
+  second apply changes nothing.
+  - **The key is used once.** A partner pastes a personal key with project,
+    dashboard and insight write and organisation read; it goes to PostHog for
+    that request and is never stored, logged or returned.
+  - **Objects are matched by recorded id**, in `posthog_provisioned_objects`,
+    with an `ow:<key>` marker in each PostHog description as the fallback.
+    PostHog's tags are a paid feature client organisations will not have.
+  - **The tier guard.** At Insights and Growth, recording is held off until a
+    partner confirms, for that tier, that the banner is live and the privacy
+    page names the new tools. Changing the tier clears the confirmation.
+  - **Every run is recorded** in `posthog_provisioning_runs`: who, when, check
+    or apply, how many differences, the outcome, the event list version. No
+    values and no key.
+  - The PostHog fields and values it relies on were confirmed against Open
+    Waters' own project on 25 September 2026; see
+    `src/server/provisioning/posthog-fields.ts`. The recording masking config's
+    shape is confirmed by the first Insights-tier apply.
+  - Not done here: the organisation, billing, the processing agreement, the
+    proxy's DNS and the read-only key. The panel lists them.
 
 ### Data pulls
 
@@ -171,6 +203,9 @@ Locked. Revisit only if a dependency changes.
 5. ✅ `add-nightly-snapshot`. The `analytics-jobs` cron service is declared in
    `.railway/railway.ts` and starts running when `railway config apply` creates
    it.
+   5a. ✅ `add-provisioning`, with the measurement tier and its guard. Added 25
+   September 2026 at Alex's request, outside the locked order: it is what the
+   client onboarding checklist needs first.
 6. 🟡 Drift check.
 7. 🟡 Search Console and PageSpeed pulls.
 8. 🟡 Overview screen.
@@ -194,11 +229,12 @@ Locked. Revisit only if a dependency changes.
 │   │   └── api/           auth/[...all] (Better Auth), health/ (liveness)
 │   ├── components/
 │   │   ├── ui/            Primitives. variants.ts holds every style recipe
-│   │   ├── registry/      RegistryForm: the one form component for registry screens
+│   │   ├── registry/      RegistryForm, the form for registry screens, and ProvisioningPanel
 │   │   └── showcase/      Section / Row / Entry for /design-system
 │   ├── db/                Drizzle schema and client. auth-schema.ts is generated
 │   ├── server/            Env, auth, session gate, crypto, PostHog queries. Server only
 │   │   ├── registry/      Data access layer for the registry: session check, validation, writes
+│   │   ├── provisioning/  Desired state, diff, the PostHog client, check/apply and the tier guard
 │   │   └── snapshots/     collect.ts runs as the system (the job); read.ts checks the session
 │   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
@@ -353,8 +389,9 @@ outside Next, so `scripts/build-scripts.mjs` bundles each into a self-contained
 ## Privacy and security
 
 **What this app stores:** client and site details, the names and work emails of
-report recipients, encrypted PostHog API keys, and **aggregate** daily numbers
-per site.
+report recipients, encrypted PostHog API keys, **aggregate** daily numbers per
+site, and a record of each provisioning run and of the PostHog dashboard and
+insights it created (ids and contract keys, never setting values).
 
 **Never stored here:** individual visitor data, session recordings, enquiry
 contents, IP addresses of client-site visitors. The nightly snapshot asks
@@ -369,6 +406,10 @@ session id or a page address with its query string, and a test asserts that.
   that queries PostHog decrypts. The UI shows the last four characters.
 - **Keys are scoped** to one PostHog project with Query Read only. A key with
   wider access is a mistake to fix, not a convenience.
+- **Provisioning's write-capable key is never stored.** It arrives with one
+  check or apply, goes to PostHog, and is gone when the request ends. A
+  PostHog project response also carries the project's own secret tokens, so
+  provisioning keeps only the settings it names from it.
 - **Accounts** exist only for allowlisted addresses. There is no sign-up.
 - **Search engines:** `noindex` in metadata and an `X-Robots-Tag` header on every
   response.

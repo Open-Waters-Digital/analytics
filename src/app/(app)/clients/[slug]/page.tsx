@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { ProvisioningPanel } from "@/components/registry/provisioning-panel";
 import { RegistryForm } from "@/components/registry/registry-form";
 import { Alert } from "@/components/ui/alert";
 import { Badge, StatusDot } from "@/components/ui/badge";
@@ -28,7 +29,10 @@ import {
   STAGE_LABELS,
   STATUS_LABELS,
   STATUS_TONES,
+  TIER_LABELS,
 } from "@/lib/registry-labels";
+import { latestProvisioningRuns, type LatestRun } from "@/server/provisioning";
+import { REQUIRED_SCOPES } from "@/server/provisioning/posthog-fields";
 import { getClientDetail, type ClientDetail, type SiteDetail } from "@/server/registry/clients";
 import {
   getSiteSnapshots,
@@ -54,6 +58,7 @@ import {
   searchConsoleFields,
   siteChangeFields,
 } from "../fields";
+import { confirmTierAction, provisioningAction } from "../provisioning-actions";
 
 export async function generateMetadata({
   params,
@@ -67,7 +72,11 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
   const client = await getClientDetail(slug);
   if (!client) notFound();
 
-  const snapshots = await getSiteSnapshots(client.sites.map(site => site.id));
+  const siteIds = client.sites.map(site => site.id);
+  const [snapshots, runs] = await Promise.all([
+    getSiteSnapshots(siteIds),
+    latestProvisioningRuns(siteIds),
+  ]);
 
   return (
     <main className="mx-auto flex max-w-(--container-max) flex-col gap-6 px-(--gutter) py-8">
@@ -120,6 +129,7 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
             client={client}
             site={site}
             snapshot={snapshots.get(site.id) ?? null}
+            lastRun={runs.get(site.id) ?? null}
           />
         ))
       )}
@@ -133,10 +143,12 @@ function SitePanel({
   client,
   site,
   snapshot,
+  lastRun,
 }: {
   client: ClientDetail;
   site: SiteDetail;
   snapshot: SiteSnapshot | null;
+  lastRun: LatestRun | null;
 }) {
   const slug = client.slug;
   const clientOwned = client.analyticsOwnership === "client_owned";
@@ -174,6 +186,10 @@ function SitePanel({
                 value: site.launchedOn ? formatDate(site.launchedOn) : <Muted>Not launched</Muted>,
               },
               { term: "Event list", value: `Version ${site.taxonomyVersion}` },
+              {
+                term: "Measurement tier",
+                value: `${TIER_LABELS[site.measurementTier]}${site.usesHeatmaps ? " · heatmaps" : ""}`,
+              },
               { term: "Timezone", value: site.timezone },
               {
                 term: "PostHog",
@@ -234,6 +250,10 @@ function SitePanel({
                 columns={2}
               />
             </Disclosure>
+          </SubSection>
+
+          <SubSection title="PostHog project">
+            <ProjectSection site={site} lastRun={lastRun} clientOwned={clientOwned} />
           </SubSection>
 
           <SubSection title="Measurement">
@@ -526,6 +546,146 @@ const BREAKDOWN_LABELS: Record<BreakdownMetric, string> = {
   leads_by_heard_about: "Leads by how they heard",
   page_views_by_ad_consent: "Page views by ad consent",
 };
+
+/** The site-side work each tier needs, which provisioning never does. */
+const SITE_WORK: Record<SiteDetail["measurementTier"], string[]> = {
+  essentials: [
+    "The contract package installed, with page types, call-to-action markers and the server-side lead.",
+    "A privacy page naming PostHog, with the objection control, linked from every page.",
+  ],
+  insights: [
+    "Everything Essentials needs.",
+    "A consent banner with a session recordings category.",
+    "startRecording() called when a visitor accepts, stopRecording() when they withdraw.",
+    "The privacy page naming session recording.",
+  ],
+  growth: [
+    "Everything Insights needs.",
+    "An advertising category in the banner.",
+    "Each ad platform loaded only after consent, with Google Consent Mode.",
+    "Conversions reported under the contract's names.",
+    "The privacy page naming each ad platform.",
+  ],
+};
+
+const RUN_OUTCOME_LABELS: Record<LatestRun["outcome"], string> = {
+  matched: "matched",
+  differs: "differences found",
+  applied: "applied",
+  partial: "applied in part",
+  failed: "failed",
+};
+
+const MANUAL_STEPS = [
+  "The PostHog organisation, owned by the client",
+  "Billing",
+  "The data processing agreement",
+  "The reverse proxy's DNS record",
+  "The read-only key for the nightly pull",
+];
+
+function ProjectSection({
+  site,
+  lastRun,
+  clientOwned,
+}: {
+  site: SiteDetail;
+  lastRun: LatestRun | null;
+  clientOwned: boolean;
+}) {
+  if (!site.posthog) {
+    return (
+      <p className="text-data">
+        <Muted>
+          {clientOwned
+            ? "This client runs PostHog themselves, so Open Waters does not provision it."
+            : "Connect PostHog above first, so provisioning knows which project it is."}
+        </Muted>
+      </p>
+    );
+  }
+  const tier = site.measurementTier;
+  const confirmed = tier === "essentials" || site.tierConfirmation?.tier === tier;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <DescriptionList
+        items={[
+          {
+            term: "Project",
+            value: `${site.posthog.projectId} · ${REGION_LABELS[site.posthog.region]}`,
+          },
+          {
+            term: "Last run",
+            value: lastRun ? (
+              `${lastRun.kind === "apply" ? "Applied" : "Checked"} ${formatRelative(lastRun.runAt)}: ${RUN_OUTCOME_LABELS[lastRun.outcome]}, against event list version ${lastRun.taxonomyVersion}`
+            ) : (
+              <Muted>Never checked</Muted>
+            ),
+          },
+          {
+            term: "Tier",
+            value:
+              tier === "essentials" ? (
+                TIER_LABELS[tier]
+              ) : confirmed && site.tierConfirmation ? (
+                `${TIER_LABELS[tier]}, confirmed ${formatDateTime(site.tierConfirmation.at)}${site.tierConfirmation.byEmail ? ` by ${site.tierConfirmation.byEmail}` : ""}`
+              ) : (
+                <StatusDot
+                  tone="warning"
+                  label={`${TIER_LABELS[tier]}, not confirmed: recording stays off`}
+                />
+              ),
+          },
+        ]}
+      />
+
+      {!confirmed ? (
+        <Disclosure summary={`Confirm the ${TIER_LABELS[tier]} tier`} open>
+          <RegistryForm
+            action={confirmTierAction.bind(null, site.id)}
+            fields={[
+              { kind: "hidden", name: "tier", value: tier },
+              {
+                kind: "checkbox",
+                name: "bannerLive",
+                label: "The consent banner is live on the production site",
+                hint: `With the categories ${TIER_LABELS[tier]} needs.`,
+              },
+              {
+                kind: "checkbox",
+                name: "privacyPageNamesTools",
+                label: "The privacy page names the tools this tier adds",
+              },
+            ]}
+            submitLabel="Confirm tier"
+          />
+        </Disclosure>
+      ) : null}
+
+      <Disclosure summary={`Work on the client's site for ${TIER_LABELS[tier]}`}>
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-data">
+          {SITE_WORK[tier].map(item => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </Disclosure>
+
+      <Disclosure summary="Steps provisioning does not do">
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-data">
+          {MANUAL_STEPS.map(item => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        <p className="mt-2 text-caption text-ink-muted">
+          The setup order in the openwaters-analytics skill has each one.
+        </p>
+      </Disclosure>
+
+      <ProvisioningPanel action={provisioningAction.bind(null, site.id)} scopes={REQUIRED_SCOPES} />
+    </div>
+  );
+}
 
 function SubSection({ title, children }: { title: string; children: ReactNode }) {
   return (

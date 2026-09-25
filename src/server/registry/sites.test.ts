@@ -301,19 +301,20 @@ describe("expected events", () => {
   });
 });
 
-describe("consent banner", () => {
+describe("measurement tier and the consent banner", () => {
   const v2Names = () => eventsFor(2)!.map(event => event.name);
-  const siteInput = (productionUrl: string, hasConsentBanner?: string) => ({
+  const siteInput = (productionUrl: string, measurementTier?: string) => ({
     productionUrl,
     framework: "next",
     taxonomyVersion: "2",
-    ...(hasConsentBanner === undefined ? {} : { hasConsentBanner }),
+    ...(measurementTier === undefined ? {} : { measurementTier }),
   });
 
-  it("a v2 site without a banner expects every v2 event but consent_updated", async () => {
+  it("a new v2 site is Essentials, with no banner, and expects every v2 event but consent_updated", async () => {
     const slug = await newClient();
     const siteId = await newSite(slug, { taxonomyVersion: "2" });
     const site = await siteOf(slug, siteId);
+    expect(site.measurementTier).toBe("essentials");
     expect(site.hasConsentBanner).toBe(false);
     expect(site.expectedEvents.sort()).toEqual(
       v2Names()
@@ -322,15 +323,15 @@ describe("consent banner", () => {
     );
   });
 
-  it("a v2 site with a banner expects consent_updated too", async () => {
+  it("an Insights site has a banner and expects consent_updated too", async () => {
     const slug = await newClient();
-    const siteId = await newSite(slug, { taxonomyVersion: "2", hasConsentBanner: "on" });
+    const siteId = await newSite(slug, { taxonomyVersion: "2", measurementTier: "insights" });
     const site = await siteOf(slug, siteId);
     expect(site.hasConsentBanner).toBe(true);
     expect(site.expectedEvents.sort()).toEqual(v2Names().sort());
   });
 
-  it("toggling the banner moves only consent_updated, and a hand-removed event stays removed", async () => {
+  it("moving between tiers moves only consent_updated, and a hand-removed event stays removed", async () => {
     const slug = await newClient();
     const productionUrl = `https://${hex()}.example.com`;
     const siteId = await newSite(slug, { productionUrl, taxonomyVersion: "2" });
@@ -339,18 +340,57 @@ describe("consent banner", () => {
     );
     expect((await setExpectedEvents(siteId, { events: withoutDownloads })).ok).toBe(true);
 
-    expect((await updateSite(siteId, siteInput(productionUrl, "on"))).ok).toBe(true);
-    const on = (await siteOf(slug, siteId)).expectedEvents;
-    expect(on).toContain("consent_updated");
-    expect(on).not.toContain("file_downloaded");
-    expect(on.sort()).toEqual([...withoutDownloads, "consent_updated"].sort());
+    expect((await updateSite(siteId, siteInput(productionUrl, "insights"))).ok).toBe(true);
+    const insights = (await siteOf(slug, siteId)).expectedEvents;
+    expect(insights.sort()).toEqual([...withoutDownloads, "consent_updated"].sort());
 
-    expect((await updateSite(siteId, siteInput(productionUrl))).ok).toBe(true);
-    const off = (await siteOf(slug, siteId)).expectedEvents;
-    expect(off.sort()).toEqual([...withoutDownloads].sort());
+    expect((await updateSite(siteId, siteInput(productionUrl, "growth"))).ok).toBe(true);
+    const growth = await siteOf(slug, siteId);
+    expect(growth.hasConsentBanner).toBe(true);
+    expect(growth.expectedEvents.sort()).toEqual([...withoutDownloads, "consent_updated"].sort());
+
+    expect((await updateSite(siteId, siteInput(productionUrl, "essentials"))).ok).toBe(true);
+    const off = await siteOf(slug, siteId);
+    expect(off.hasConsentBanner).toBe(false);
+    expect(off.expectedEvents.sort()).toEqual([...withoutDownloads].sort());
   });
 
-  it("a banner on a v1 site adds nothing, since v1 has no consent_updated", async () => {
+  it("a change of tier clears the confirmation, and the same tier keeps it", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const siteId = await newSite(slug, {
+      productionUrl,
+      taxonomyVersion: "2",
+      measurementTier: "insights",
+    });
+    await getDb()
+      .update(sites)
+      .set({ tierConfirmedFor: "insights", tierConfirmedAt: new Date() })
+      .where(eq(sites.id, siteId));
+
+    expect((await updateSite(siteId, siteInput(productionUrl, "insights"))).ok).toBe(true);
+    expect((await siteOf(slug, siteId)).tierConfirmation?.tier).toBe("insights");
+
+    expect((await updateSite(siteId, siteInput(productionUrl, "growth"))).ok).toBe(true);
+    expect((await siteOf(slug, siteId)).tierConfirmation).toBeNull();
+  });
+
+  it("rejects a tier that does not exist", async () => {
+    const slug = await newClient();
+    const productionUrl = `https://${hex()}.example.com`;
+    const siteId = await newSite(slug, { productionUrl });
+    const result = await updateSite(siteId, siteInput(productionUrl, "platinum"));
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.fieldErrors["measurementTier"]).toBeTruthy();
+  });
+
+  it("stores the heatmaps choice", async () => {
+    const slug = await newClient();
+    const siteId = await newSite(slug, { usesHeatmaps: "on" });
+    expect((await siteOf(slug, siteId)).usesHeatmaps).toBe(true);
+  });
+
+  it("a higher tier on a v1 site adds nothing, since v1 has no consent_updated", async () => {
     const slug = await newClient();
     const productionUrl = `https://${hex()}.example.com`;
     const siteId = await newSite(slug, { productionUrl });
@@ -359,7 +399,7 @@ describe("consent banner", () => {
       productionUrl,
       framework: "astro",
       taxonomyVersion: "1",
-      hasConsentBanner: "on",
+      measurementTier: "insights",
     });
     expect(result.ok).toBe(true);
     expect((await siteOf(slug, siteId)).expectedEvents.sort()).toEqual(before);
@@ -371,7 +411,7 @@ describe("consent banner", () => {
     const siteId = await newSite(slug, { productionUrl, taxonomyVersion: "2" });
     testSession.signedIn = false;
     try {
-      await expect(updateSite(siteId, siteInput(productionUrl, "on"))).rejects.toBeInstanceOf(
+      await expect(updateSite(siteId, siteInput(productionUrl, "insights"))).rejects.toBeInstanceOf(
         UnauthorisedError,
       );
     } finally {

@@ -10,7 +10,10 @@ import { UnauthorisedError, type AppSession } from "@/server/session-policy";
  */
 export const testSession = { signedIn: true };
 
-const session: AppSession = { user: { id: "test-user", email: "test@openwaters.digital" } };
+/** A UUID, as Better Auth's are, so rows can reference it. Tests that store it insert the user. */
+export const TEST_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+const session: AppSession = { user: { id: TEST_USER_ID, email: "test@openwaters.digital" } };
 
 export { UnauthorisedError };
 

@@ -6,9 +6,10 @@
  * then run `pnpm db:generate`. They use Better Auth's column types (timestamp
  * without time zone), an accepted exception to the timestamptz convention.
  *
- * The client registry lives in registry-schema.ts, and the nightly snapshot's
- * tables in snapshot-schema.ts.
+ * The client registry lives in registry-schema.ts, the nightly snapshot's
+ * tables in snapshot-schema.ts, and provisioning's in provisioning-schema.ts.
  */
 export * from "./auth-schema";
 export * from "./registry-schema";
+export * from "./provisioning-schema";
 export * from "./snapshot-schema";

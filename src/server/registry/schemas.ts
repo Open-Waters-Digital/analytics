@@ -107,26 +107,35 @@ export const productionUrl = z
     return url.origin;
   });
 
-export const siteSchema = z.object({
-  productionUrl,
-  framework: z.enum(frameworks, { error: "Choose a framework." }),
-  repository: optionalText(200, "the repository"),
-  launchedOn: z
-    .union([z.literal(""), isoDate])
-    .optional()
-    .transform(value => (value ? value : null)),
-  taxonomyVersion: z.coerce
-    .number({ error: "Choose an event list version." })
-    .int()
-    .refine(isKnownVersion, "Choose an event list version that exists."),
-  timezone: z
-    .string()
-    .trim()
-    .default("Europe/London")
-    .transform(value => value || "Europe/London")
-    .refine(isValidTimezone, "Use an IANA timezone name, such as Europe/London."),
-  hasConsentBanner: checkbox,
-});
+export const measurementTiers = ["essentials", "insights", "growth"] as const;
+
+export const siteSchema = z
+  .object({
+    productionUrl,
+    framework: z.enum(frameworks, { error: "Choose a framework." }),
+    repository: optionalText(200, "the repository"),
+    launchedOn: z
+      .union([z.literal(""), isoDate])
+      .optional()
+      .transform(value => (value ? value : null)),
+    taxonomyVersion: z.coerce
+      .number({ error: "Choose an event list version." })
+      .int()
+      .refine(isKnownVersion, "Choose an event list version that exists."),
+    timezone: z
+      .string()
+      .trim()
+      .default("Europe/London")
+      .transform(value => value || "Europe/London")
+      .refine(isValidTimezone, "Use an IANA timezone name, such as Europe/London."),
+    measurementTier: z
+      .enum(measurementTiers, { error: "Choose a measurement tier." })
+      .default("essentials"),
+    usesHeatmaps: checkbox,
+  })
+  // The consent banner follows the tier (add-provisioning, design D5a): Insights
+  // and Growth mean a banner, Essentials none. It is never set on its own.
+  .transform(site => ({ ...site, hasConsentBanner: site.measurementTier !== "essentials" }));
 
 export const removeSchema = z.object({ confirm: confirmYes });
 

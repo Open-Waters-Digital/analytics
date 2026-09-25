@@ -7,6 +7,7 @@ import {
   REGION_LABELS,
   SOURCE_LABELS,
   STATUS_LABELS,
+  TIER_LABELS,
   optionsFrom,
 } from "@/lib/registry-labels";
 import type { ClientDetail, SiteDetail } from "@/server/registry/clients";
@@ -102,11 +103,19 @@ export function siteFields(site?: SiteDetail): FieldSpec[] {
       defaultValue: String(site?.taxonomyVersion ?? EVENT_LIST_VERSION),
     },
     {
+      kind: "select",
+      name: "measurementTier",
+      label: "Measurement tier",
+      hint: "Essentials needs no banner. Insights and Growth run behind a consent banner, which adds consent_updated to the expected events. Changing the tier clears its confirmation.",
+      options: optionsFrom(TIER_LABELS),
+      defaultValue: site?.measurementTier ?? "essentials",
+    },
+    {
       kind: "checkbox",
-      name: "hasConsentBanner",
-      label: "Has a consent banner",
-      hint: "Only for sites running ads or replay behind a banner. Adds consent_updated to the expected events.",
-      defaultChecked: site?.hasConsentBanner ?? false,
+      name: "usesHeatmaps",
+      label: "Uses aggregate heatmaps",
+      hint: "A per-client decision, allowed at every tier. Record why in the site's AGENTS.md.",
+      defaultChecked: site?.usesHeatmaps ?? false,
     },
     {
       kind: "text",

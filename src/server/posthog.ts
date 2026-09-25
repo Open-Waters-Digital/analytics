@@ -38,7 +38,7 @@ export const CHECK_MESSAGES = {
   unexpected: "PostHog returned something unexpected. Try again in a minute.",
 } as const;
 
-const HOSTS: Record<PostHogRegion, string> = {
+export const POSTHOG_HOSTS: Record<PostHogRegion, string> = {
   eu: "https://eu.posthog.com",
   us: "https://us.posthog.com",
 };
@@ -91,7 +91,7 @@ export async function runHogQlQuery(
   options: QueryOptions = {},
 ): Promise<QueryOutcome> {
   const { fetchImpl = fetch, timeoutMs = QUERY_TIMEOUT_MS, name = "openwaters_query" } = options;
-  const url = `${HOSTS[connection.region]}/api/projects/${connection.projectId}/query/`;
+  const url = `${POSTHOG_HOSTS[connection.region]}/api/projects/${connection.projectId}/query/`;
 
   let response: Response;
   try {

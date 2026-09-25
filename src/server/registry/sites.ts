@@ -94,11 +94,24 @@ export async function updateSite(siteId: string, input: unknown): Promise<Result
   try {
     const updated = await getDb().transaction(async tx => {
       const [before] = await tx
-        .select({ hasConsentBanner: sites.hasConsentBanner })
+        .select({
+          hasConsentBanner: sites.hasConsentBanner,
+          measurementTier: sites.measurementTier,
+        })
         .from(sites)
         .where(eq(sites.id, siteId));
       if (!before) return false;
-      await tx.update(sites).set(parsed.data).where(eq(sites.id, siteId));
+      // A confirmation is for one tier, so a change of tier clears it (design D5a).
+      const tierChanged = parsed.data.measurementTier !== before.measurementTier;
+      await tx
+        .update(sites)
+        .set({
+          ...parsed.data,
+          ...(tierChanged
+            ? { tierConfirmedFor: null, tierConfirmedAt: null, tierConfirmedBy: null }
+            : {}),
+        })
+        .where(eq(sites.id, siteId));
 
       const banner = parsed.data.hasConsentBanner;
       if (banner !== before.hasConsentBanner) {

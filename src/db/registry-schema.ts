@@ -14,6 +14,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { users } from "./auth-schema";
 import { timestamps } from "./columns";
 
 /**
@@ -41,6 +42,8 @@ export const connectionStatus = pgEnum("connection_status", [
 ]);
 export const currency = pgEnum("currency", ["GBP", "EUR", "USD"]);
 export const figureSource = pgEnum("figure_source", ["client_confirmed", "open_waters_estimate"]);
+/** The contract package's measurement tiers (add-provisioning, design D5a). */
+export const measurementTier = pgEnum("measurement_tier", ["essentials", "insights", "growth"]);
 export const siteChangeKind = pgEnum("site_change_kind", [
   "launch",
   "design",
@@ -79,11 +82,27 @@ export const sites = pgTable(
     taxonomyVersion: integer().notNull(),
     timezone: text().notNull(),
     // Whether the site runs a consent banner. Only such a site is expected to
-    // send consent_updated; see the expected-event defaults.
+    // send consent_updated; see the expected-event defaults. Written from the
+    // measurement tier since add-provisioning, never set on its own.
     hasConsentBanner: boolean().notNull().default(false),
+    // Aggregate heatmaps, a per-client decision allowed at every tier.
+    usesHeatmaps: boolean().notNull().default(false),
+    measurementTier: measurementTier().notNull().default("essentials"),
+    // The guard on the higher tiers: which tier a partner last confirmed the
+    // banner and privacy page for. Cleared whenever the tier changes.
+    tierConfirmedFor: measurementTier(),
+    tierConfirmedAt: timestamp({ withTimezone: true }),
+    tierConfirmedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     ...timestamps,
   },
-  table => [index("sites_client_id_idx").on(table.clientId)],
+  table => [
+    index("sites_client_id_idx").on(table.clientId),
+    index("sites_tier_confirmed_by_idx").on(table.tierConfirmedBy),
+    check(
+      "sites_tier_confirmation_complete",
+      sql`(${table.tierConfirmedFor} is null) = (${table.tierConfirmedAt} is null)`,
+    ),
+  ],
 );
 
 export const reportRecipients = pgTable(

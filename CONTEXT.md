@@ -37,10 +37,39 @@ versioned (`taxonomy_version`). Defined in the contract package,
 The subset of the event list a particular site should send. A site with no
 downloads does not expect `file_downloaded`.
 
+**Measurement tier**
+How much a site measures, from the contract package's three tiers. **Essentials**:
+cookieless PostHog under the statistical purposes exception, with no banner.
+**Insights**: adds session recordings, behind consent. **Growth**: adds advertising
+pixels, behind consent. Set per site; it decides the consent banner and the
+PostHog settings provisioning requires.
+
+**Tier confirmation**
+A partner's statement, for a site's current tier, that the consent banner is
+live on the production site and the privacy page names the tools the tier adds.
+Until it is given, provisioning holds recording off. Changing the tier clears it.
+
 **Consent banner** (`has_consent_banner`)
-Whether a site runs a consent banner for ads or replay. Only such a site is
-expected to send `consent_updated`, and only its page views are worth reading
-by `ad_consent`.
+Whether a site runs a consent banner for ads or replay, derived from the
+measurement tier: Insights and Growth have one, Essentials does not. Only such a
+site is expected to send `consent_updated`, and only its page views are worth
+reading by `ad_consent`.
+
+**Provisioning**
+Bringing a site's PostHog project to the settings and baseline dashboard the
+contract and the registry require. A **provisioning check** lists the
+differences and changes nothing; an **apply** makes them, and a second apply
+changes nothing. Uses a partner's personal key for that one request, never
+stored.
+
+**Held** (difference)
+A difference provisioning reports but will not apply until the tier is
+confirmed: today, session recording at Insights and Growth.
+
+**Provisioned object**
+A PostHog dashboard or insight provisioning created, recorded here by its
+contract key and PostHog id, and marked `ow:<key>` in its PostHog description
+so it can be found again if the record is lost.
 
 **(not recorded)**
 A breakdown value meaning the event was sent at a taxonomy version older than
