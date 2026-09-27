@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import type { FormState, FormValues } from "@/lib/form-state";
 import { createClient, findSiteId, updateClient } from "@/server/registry/clients";
@@ -28,6 +29,7 @@ import {
   saveSearchConsoleProperty,
   type SearchCheckOutcome,
 } from "@/server/registry/search";
+import { startLabRun } from "@/server/registry/page-experience-run";
 import { UnauthorisedError } from "@/server/session-policy";
 
 /**
@@ -308,6 +310,13 @@ export async function checkSearchConsoleAction(slug: string, siteId: string): Pr
 export async function checkBingSiteAction(slug: string, siteId: string): Promise<void> {
   await requireSiteOf(slug, siteId);
   await buttonMutation("check Bing site", () => checkBingSite(siteId));
+}
+
+export async function runLabAction(slug: string, siteId: string): Promise<void> {
+  await requireSiteOf(slug, siteId);
+  await buttonMutation("start page experience lab run", () =>
+    startLabRun(siteId, work => after(work)),
+  );
 }
 
 export async function setExpectedEventsAction(

@@ -208,12 +208,32 @@ value_minor, currency`, stored in `site_daily_metrics`. The metric list is
     sessions and enquiries, and the pages Google has not indexed. Google's days
     are Pacific Time, and the report says so.
   - Confirmed against the live APIs on 25 September 2026 with nothing shared:
-    tokens, empty site lists, and the refusals for an unshared property. The
-    shape of real search data is confirmed when the first client shares a
-    property (task 9.1).
-- 🟡 **PageSpeed and Core Web Vitals** (`add-page-experience`, proposed): the
-  Chrome UX Report nightly and PageSpeed Insights weekly, with one API key in
-  the same Google Cloud project.
+    tokens, empty site lists, and the refusals for an unshared property. Real
+    Google data confirmed on 27 September 2026 against Luxury Gardens'
+    property: a 500-day backfill in 17 seconds, and 20 of 33 sitemap pages
+    indexed. Bing's real data waits for a client with a Bing site.
+- ✅ **Page experience** (`add-page-experience`, spec `page-experience`). Core
+  Web Vitals from the Chrome UX Report and lab runs from PageSpeed Insights,
+  through one Open Waters API key (`GOOGLE_API_KEY`) in the same Google Cloud
+  project, into `site_page_experience`.
+  - **Field data nightly**, after search: the origin and every tracked page, on
+    phones and desktops, the rolling 28 days to the day Google last published.
+    A 404 is "not enough Chrome traffic", stored as `not_enough_data`, and is
+    normal for a small site: neither Open Waters nor Luxury Gardens' Wix site
+    had any on 27 September 2026.
+  - **History once**, for a site marked as replacing an existing one: about
+    six months of the origin's weekly figures, so the new site has a before.
+  - **Lab runs on Mondays**, and from **Run now** on the client page: one
+    Lighthouse run per tracked page, on a phone, about 7 to 70 seconds each. A
+    page that does not load is recorded as failed and the rest carry on. Run
+    now works through the pages after the response (`after()`), one run per
+    site at a time; a run still marked running after 10 minutes is released.
+  - **Tracked pages and a budget** are on the site's form: `/` always, up to
+    nine more, and optional LCP, INP, CLS and lab-score targets. A verdict is
+    judged against the budget where one is set, else Google's thresholds.
+  - First real run, 27 September 2026, on a phone: Open Waters' Railway site
+    scored 100 (LCP 1.1 s); Luxury Gardens' Wix home page 35 (LCP 20.2 s,
+    TBT 951 ms) and its contact page 49.
 - 🟡 **Overview**: every client's health and headline trends on one screen.
 
 ### Reports
@@ -242,7 +262,7 @@ Locked. Revisit only if a dependency changes.
 6. ✅ `add-search-console`, Google and Bing. Moved ahead of the drift check on
    25 September 2026 at Alex's request, because the onboarding checklist asks
    for both on every site.
-7. 🟡 `add-page-experience`: PageSpeed and Core Web Vitals.
+7. ✅ `add-page-experience`: PageSpeed and Core Web Vitals.
 8. 🟡 Drift check.
 9. 🟡 Overview screen.
 10. 🔵 Report drafts.
@@ -271,10 +291,11 @@ Locked. Revisit only if a dependency changes.
 │   ├── server/            Env, auth, session gate, crypto, PostHog queries. Server only
 │   │   ├── registry/      Data access layer for the registry: session check, validation, writes
 │   │   ├── provisioning/  Desired state, diff, the PostHog client, check/apply and the tier guard
-│   │   ├── search-console.ts, bing-webmaster.ts
-│   │   │                  The two engines' clients: fixed messages, never the key
-│   │   └── snapshots/     collect.ts and search.ts run as the system (the job);
-│   │                      read.ts and search-read.ts check the session
+│   │   ├── search-console.ts, bing-webmaster.ts, page-experience.ts
+│   │   │                  Google's, Bing's and the Chrome UX Report and PageSpeed
+│   │   │                  clients: fixed messages, never the key
+│   │   └── snapshots/     collect.ts, search.ts and page-experience-pull.ts run as
+│   │                      the system (the job); the *-read.ts modules check the session
 │   ├── proxy.ts           Optimistic signed-out redirect (Next 16's middleware)
 │   ├── styles/tokens.css  Start here for anything visual
 │   ├── lib/               Framework-free helpers safe for any module
@@ -477,19 +498,21 @@ settings live in `.railway/railway.ts` (Railway Infrastructure as Code).
 A second Railway service, built from the same repository and the same
 `Dockerfile`, declared in the same `.railway/railway.ts`:
 
-| Setting | Value                                                                 |
-| ------- | --------------------------------------------------------------------- |
-| Start   | `node dist/jobs/nightly-snapshot.mjs`                                 |
-| Cron    | `20 3 * * *` (03:20 UTC)                                              |
-| Health  | None: the container runs once and exits                               |
-| Deploy  | No pre-deploy. Migrations belong to the web service                   |
-| Vars    | `DATABASE_URL`, `CREDENTIALS_ENCRYPTION_KEY`, and the two search keys |
+| Setting | Value                                                                            |
+| ------- | -------------------------------------------------------------------------------- |
+| Start   | `node dist/jobs/nightly-snapshot.mjs`                                            |
+| Cron    | `20 3 * * *` (03:20 UTC)                                                         |
+| Health  | None: the container runs once and exits                                          |
+| Deploy  | No pre-deploy. Migrations belong to the web service                              |
+| Vars    | `DATABASE_URL`, `CREDENTIALS_ENCRYPTION_KEY`, and the three Google and Bing keys |
 
 `CREDENTIALS_ENCRYPTION_KEY` must be **the same value** as the web service, or
 stored client keys cannot be decrypted. `GOOGLE_SERVICE_ACCOUNT_KEY` (the
 service account's JSON key, base64) and `BING_WEBMASTER_API_KEY` are set on
 both services too: the web service checks properties, the job pulls them.
-Unset, each engine is dormant. The job reads `databaseEnv()` and
+`GOOGLE_API_KEY`, restricted to the Chrome UX Report and PageSpeed Insights
+APIs, is on both as well: the job pulls field and lab data, the web service
+runs Run now. Unset, each is dormant. The job reads `databaseEnv()` and
 `credentialsKey()` only, never `env()`, so a missing auth or email variable
 cannot stop the pull.
 

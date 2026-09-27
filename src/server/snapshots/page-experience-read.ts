@@ -8,6 +8,7 @@ import {
   siteTrackedPages,
 } from "@/db/schema";
 import { labBelowTarget, verdictFor, type Budget, type Verdict } from "@/lib/page-experience";
+import { googleApiKey } from "@/server/env";
 import { requireSession } from "@/server/session";
 
 /**
@@ -42,6 +43,8 @@ export interface PageExperienceReport {
     failed: string | null;
   }[];
   runInProgress: boolean;
+  /** Whether the server has a key, so the page can say why nothing arrives. */
+  configured: boolean;
 }
 
 const numberOrNull = (value: string | null) => (value === null ? null : Number(value));
@@ -156,5 +159,6 @@ export async function getPageExperienceReport(
     runInProgress:
       latestRun?.status === "running" &&
       now.getTime() - latestRun.startedAt.getTime() < STALE_RUN_MS,
+    configured: googleApiKey() !== null,
   };
 }

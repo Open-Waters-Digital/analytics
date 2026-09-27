@@ -47,6 +47,18 @@ try {
       }),
     );
   }
+  for (const result of summary.pageExperience) {
+    console.info(
+      JSON.stringify({
+        event: "page_experience_site",
+        site: result.clientSlug,
+        site_id: result.siteId,
+        outcome: result.outcome,
+        reason: result.reason,
+        ms: result.durationMs,
+      }),
+    );
+  }
   for (const pass of summary.indexing) {
     console.info(
       JSON.stringify({

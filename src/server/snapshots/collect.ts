@@ -21,6 +21,11 @@ import {
 } from "@/server/posthog-queries";
 import { CHECK_MESSAGES, runHogQlQueryWithRetry, type QueryOptions } from "@/server/posthog";
 import { mapWithConcurrency } from "./concurrency";
+import {
+  runPageExperiencePass,
+  type PageExperienceDeps,
+  type PageExperienceResult,
+} from "./page-experience-pull";
 import { runSearchPass, type IndexingSummary, type SearchDeps, type SearchResult } from "./search";
 import { FIRST_PULL_DAYS, snapshotWindow, WINDOW_DAYS, type DayWindow } from "./window";
 
@@ -70,6 +75,8 @@ export interface RunSummary {
   /** Google and Bing, one of each per site (add-search-console). */
   searchResults: SearchResult[];
   indexing: IndexingSummary[];
+  /** Page experience, one per site (add-page-experience). */
+  pageExperience: PageExperienceResult[];
 }
 
 export interface SnapshotDeps {
@@ -79,6 +86,7 @@ export interface SnapshotDeps {
   sleep: (ms: number) => Promise<void>;
   concurrency: number;
   search: Partial<SearchDeps>;
+  pageExperience: Partial<PageExperienceDeps>;
 }
 
 const defaultDeps: SnapshotDeps = {
@@ -88,6 +96,7 @@ const defaultDeps: SnapshotDeps = {
   sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
   concurrency: DEFAULT_CONCURRENCY,
   search: {},
+  pageExperience: {},
 };
 
 interface Candidate {
@@ -136,6 +145,12 @@ export async function runNightlySnapshot(
     ...deps.search,
   });
 
+  const pageExperience = await runPageExperiencePass(runId, {
+    now: deps.now,
+    concurrency: deps.concurrency,
+    ...deps.pageExperience,
+  });
+
   const finishedAt = deps.now();
   await db
     .update(snapshotRuns)
@@ -156,6 +171,7 @@ export async function runNightlySnapshot(
     results,
     searchResults: search.results,
     indexing: search.indexing,
+    pageExperience,
   };
 }
 

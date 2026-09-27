@@ -451,7 +451,8 @@ describe("runNightlySnapshot", () => {
           inArray(siteSnapshotResults.siteId, [ok.siteId, skipped.siteId]),
         ),
       );
-    // One PostHog result per site, and one per search engine beside it.
+    // One PostHog result per site, one per search engine and one for page
+    // experience beside it.
     const posthog = results.filter(result => result.source === "posthog");
     expect(posthog).toHaveLength(2);
     expect(posthog.find(result => result.siteId === ok.siteId)?.outcome).toBe("ok");
@@ -464,6 +465,8 @@ describe("runNightlySnapshot", () => {
       "bing_search",
       "google_search",
       "google_search",
+      "page_experience",
+      "page_experience",
     ]);
     expect(search.every(result => result.outcome === "skipped")).toBe(true);
   });

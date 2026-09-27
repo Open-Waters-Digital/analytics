@@ -76,6 +76,27 @@ do not name every query.
 The weekly inspection of a site's sitemap pages with Google, recording which
 are indexed and, for those that are not, Google's reason.
 
+**Page experience**
+How fast and stable a site is for the people using it. **Field data** is real
+Chrome visitors at the 75th percentile over a rolling 28 days, from the Chrome
+UX Report, per origin or page and per phone or desktop. **Not enough Chrome
+traffic** means Google publishes nothing for it, which is normal for a small
+site and is not a failure. A **lab run** is one Lighthouse test of one page on
+a simulated phone, from PageSpeed Insights: a diagnosis, never the verdict.
+
+**Tracked page**
+A path on a site that page experience measures by itself as well as the origin.
+`/` always, and up to nine more.
+
+**Budget**
+A site's own targets for LCP, INP, CLS and the lab score. Each is optional; a
+metric without one is judged against Google's "good" threshold.
+
+**Verdict**
+Passing or failing per form factor, from the latest origin field data against
+the budget or Google's thresholds. A metric Chrome does not report is left out
+rather than counted either way.
+
 **Provisioning**
 Bringing a site's PostHog project to the settings and baseline dashboard the
 contract and the registry require. A **provisioning check** lists the

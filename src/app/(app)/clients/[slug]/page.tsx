@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DescriptionList } from "@/components/ui/description-list";
 import { Panel } from "@/components/ui/panel";
 import { Table, Td, Th, Tr } from "@/components/ui/table";
-import { buttonClasses } from "@/components/ui/variants";
+import { buttonClasses, dotClasses, type Tone } from "@/components/ui/variants";
 import { eventsFor } from "@/lib/event-list";
 import {
   CHANGE_KIND_LABELS,
@@ -32,6 +32,12 @@ import {
   TIER_LABELS,
 } from "@/lib/registry-labels";
 import { latestProvisioningRuns, type LatestRun } from "@/server/provisioning";
+import { targets, type MetricVerdict, type Verdict } from "@/lib/page-experience";
+import {
+  getPageExperienceReport,
+  type FormFactorReport,
+  type PageExperienceReport,
+} from "@/server/snapshots/page-experience-read";
 import { getSearchReports, type Headline, type SearchReport } from "@/server/snapshots/search-read";
 import { REQUIRED_SCOPES } from "@/server/provisioning/posthog-fields";
 import { getClientDetail, type ClientDetail, type SiteDetail } from "@/server/registry/clients";
@@ -50,6 +56,7 @@ import {
   savePostHogAction,
   checkBingSiteAction,
   checkSearchConsoleAction,
+  runLabAction,
   saveBingSiteAction,
   saveSearchConsoleAction,
   setExpectedEventsAction,
@@ -78,10 +85,11 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
   if (!client) notFound();
 
   const siteIds = client.sites.map(site => site.id);
-  const [snapshots, runs, searches] = await Promise.all([
+  const [snapshots, runs, searches, experiences] = await Promise.all([
     getSiteSnapshots(siteIds),
     latestProvisioningRuns(siteIds),
     getSearchReports(siteIds),
+    Promise.all(siteIds.map(id => getPageExperienceReport(id))),
   ]);
 
   return (
@@ -137,6 +145,7 @@ export default async function ClientPage({ params }: PageProps<"/clients/[slug]"
             snapshot={snapshots.get(site.id) ?? null}
             lastRun={runs.get(site.id) ?? null}
             search={searches.get(site.id) ?? null}
+            experience={experiences[client.sites.indexOf(site)] ?? null}
           />
         ))
       )}
@@ -152,12 +161,14 @@ function SitePanel({
   snapshot,
   lastRun,
   search,
+  experience,
 }: {
   client: ClientDetail;
   site: SiteDetail;
   snapshot: SiteSnapshot | null;
   lastRun: LatestRun | null;
   search: SearchReport | null;
+  experience: PageExperienceReport | null;
 }) {
   const slug = client.slug;
   const clientOwned = client.analyticsOwnership === "client_owned";
@@ -271,6 +282,12 @@ function SitePanel({
 
           <SubSection title="Search">
             <SearchSection slug={slug} site={site} report={search} />
+          </SubSection>
+
+          <SubSection title="Page experience">
+            {experience ? (
+              <PageExperienceSection slug={slug} site={site} report={experience} />
+            ) : null}
           </SubSection>
 
           <SubSection title="Expected events">
@@ -940,6 +957,265 @@ function SearchSection({
             submitLabel="Save and check"
           />
         </Disclosure>
+      </div>
+    </div>
+  );
+}
+
+const VERDICT_DISPLAY: Record<Verdict["outcome"], { tone: Tone; label: string }> = {
+  passing: { tone: "success", label: "Passing" },
+  failing: { tone: "danger", label: "Failing" },
+  not_enough_data: { tone: "neutral", label: "Not enough Chrome traffic yet" },
+  no_data: { tone: "neutral", label: "No field data yet" },
+};
+
+const METRIC_TONES: Record<MetricVerdict, Tone> = {
+  pass: "success",
+  fail: "danger",
+  not_reported: "neutral",
+};
+
+const ms = (value: number | null) =>
+  value === null ? "–" : value >= 1_000 ? `${(value / 1_000).toFixed(1)} s` : `${value} ms`;
+const shift = (value: number | null) => (value === null ? "–" : value.toFixed(2));
+const monthLabel = (month: string) =>
+  new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(
+    new Date(`${month}-01T00:00:00Z`),
+  );
+
+function VerdictLine({ label, report }: { label: string; report: FormFactorReport }) {
+  const display = VERDICT_DISPLAY[report.verdict.outcome];
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-caption text-ink-muted">{label}</span>
+      <StatusDot
+        tone={display.tone}
+        label={
+          report.verdict.outcome === "failing"
+            ? `Failing on ${report.verdict.failing.join(", ")}`
+            : display.label
+        }
+      />
+    </div>
+  );
+}
+
+function MetricCell({
+  value,
+  verdict,
+  label,
+}: {
+  value: string;
+  verdict: MetricVerdict;
+  label: string;
+}) {
+  return (
+    <Td className="text-right tabular-nums">
+      {verdict === "not_reported" ? (
+        <Muted>{value}</Muted>
+      ) : (
+        <span className="inline-flex items-center justify-end gap-2">
+          <span aria-hidden="true" className={dotClasses(METRIC_TONES[verdict])} />
+          {value}
+          <span className="sr-only">
+            {verdict === "pass" ? `, within ${label}` : `, outside ${label}`}
+          </span>
+        </span>
+      )}
+    </Td>
+  );
+}
+
+function PageExperienceSection({
+  slug,
+  site,
+  report,
+}: {
+  slug: string;
+  site: SiteDetail;
+  report: PageExperienceReport;
+}) {
+  const goal = targets(report.budget);
+  const hasField = report.phone.latest !== null || report.desktop.latest !== null;
+  const hasLab = report.lab.some(row => row.day !== null);
+  const budgetNote = report.budget
+    ? "Against this site's budget where it is stricter than Google's thresholds."
+    : "Against Google's thresholds.";
+  const metrics = [
+    {
+      name: "LCP",
+      target: ms(goal.lcpMs),
+      key: "lcp" as const,
+      phone: ms(report.phone.latest?.lcpMs ?? null),
+      desktop: ms(report.desktop.latest?.lcpMs ?? null),
+      trend: (row: FormFactorReport["months"][number]) => ms(row.lcpMs),
+    },
+    {
+      name: "INP",
+      target: ms(goal.inpMs),
+      key: "inp" as const,
+      phone: ms(report.phone.latest?.inpMs ?? null),
+      desktop: ms(report.desktop.latest?.inpMs ?? null),
+      trend: (row: FormFactorReport["months"][number]) => ms(row.inpMs),
+    },
+    {
+      name: "CLS",
+      target: shift(goal.cls),
+      key: "cls" as const,
+      phone: shift(report.phone.latest?.cls ?? null),
+      desktop: shift(report.desktop.latest?.cls ?? null),
+      trend: (row: FormFactorReport["months"][number]) => shift(row.cls),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!report.configured ? (
+        <Alert tone="warning">
+          Page experience is not configured on the server. Set GOOGLE_API_KEY on the web and jobs
+          services.
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-col gap-3 md:flex-row md:gap-8">
+        <VerdictLine label="Phones" report={report.phone} />
+        <VerdictLine label="Desktops" report={report.desktop} />
+      </div>
+
+      {hasField ? (
+        <>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Metric</Th>
+                <Th className="text-right">Phone</Th>
+                <Th className="text-right">Desktop</Th>
+                <Th className="hidden text-right md:table-cell">Target</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.map(metric => (
+                <Tr key={metric.name}>
+                  <Td className="font-medium">{metric.name}</Td>
+                  <MetricCell
+                    value={metric.phone}
+                    verdict={report.phone.verdict.metrics[metric.key]}
+                    label={`the ${metric.target} target`}
+                  />
+                  <MetricCell
+                    value={metric.desktop}
+                    verdict={report.desktop.verdict.metrics[metric.key]}
+                    label={`the ${metric.target} target`}
+                  />
+                  <Td className="hidden text-right tabular-nums md:table-cell">{metric.target}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+          <p className="text-caption text-ink-muted">
+            Real Chrome visitors at the 75th percentile, over the rolling 28 days to{" "}
+            {formatDate((report.phone.latest ?? report.desktop.latest)!.day)}. {budgetNote}
+          </p>
+
+          {report.phone.months.length > 1 ? (
+            <div className="flex flex-col gap-2">
+              <h4 className="text-data font-medium">Phones, month by month</h4>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Metric</Th>
+                    {report.phone.months.map(row => (
+                      <Th key={row.month} className="text-right">
+                        {monthLabel(row.month)}
+                      </Th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.map(metric => (
+                    <Tr key={metric.name}>
+                      <Td className="font-medium">{metric.name}</Td>
+                      {report.phone.months.map(row => (
+                        <Td key={row.month} className="text-right tabular-nums">
+                          {metric.trend(row)}
+                        </Td>
+                      ))}
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-data">
+          <Muted>
+            {report.phone.verdict.outcome === "not_enough_data"
+              ? "Chrome does not have enough visits to this site to report on it yet. The lab runs below still measure it."
+              : "Field data arrives after the next nightly run."}
+          </Muted>
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-data font-medium">Lab, on a phone</h4>
+          {report.runInProgress ? (
+            <StatusDot tone="info" label="Run in progress. Reload to see results." />
+          ) : (
+            <form action={runLabAction.bind(null, slug, site.id)}>
+              <Button type="submit" variant="secondary" size="sm" disabled={!report.configured}>
+                Run now
+              </Button>
+            </form>
+          )}
+        </div>
+        {hasLab || report.runInProgress ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Page</Th>
+                <Th className="text-right">Score</Th>
+                <Th className="hidden text-right md:table-cell">LCP</Th>
+                <Th className="hidden text-right md:table-cell">TBT</Th>
+                <Th className="hidden text-right md:table-cell">CLS</Th>
+                <Th className="hidden text-right md:table-cell">Run</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.lab.map(row => (
+                <Tr key={row.path}>
+                  <Td className="break-all">{row.path}</Td>
+                  <Td className="text-right tabular-nums">
+                    {row.failed ? (
+                      <Muted>Did not load</Muted>
+                    ) : row.score === null ? (
+                      <Muted>–</Muted>
+                    ) : row.belowTarget ? (
+                      <Badge tone="warning">{row.score}</Badge>
+                    ) : (
+                      row.score
+                    )}
+                  </Td>
+                  <Td className="hidden text-right tabular-nums md:table-cell">{ms(row.lcpMs)}</Td>
+                  <Td className="hidden text-right tabular-nums md:table-cell">{ms(row.tbtMs)}</Td>
+                  <Td className="hidden text-right tabular-nums md:table-cell">{shift(row.cls)}</Td>
+                  <Td className="hidden text-right md:table-cell">
+                    {row.day ? formatDate(row.day) : <Muted>Not yet</Muted>}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <p className="text-data">
+            <Muted>No lab runs yet. They run every Monday, or press Run now.</Muted>
+          </p>
+        )}
+        <p className="text-caption text-ink-muted">
+          One Lighthouse run per page, on a simulated mid-range phone. A single run varies by a few
+          points; a score below {goal.labScore} is marked.
+        </p>
       </div>
     </div>
   );
