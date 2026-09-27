@@ -107,6 +107,61 @@ export const productionUrl = z
     return url.origin;
   });
 
+/**
+ * Tracked pages beyond the home page, one path per line (add-page-experience,
+ * design D7). `/` is always tracked, so it is added here and never counted
+ * against the nine.
+ */
+export const trackedPages = z
+  .string()
+  .optional()
+  .transform(value => [
+    ...new Set(
+      (value ?? "")
+        .split("\n")
+        .map(path => path.trim())
+        .filter(path => path.length > 0 && path !== "/"),
+    ),
+  ])
+  .pipe(
+    z
+      .array(
+        z
+          .string()
+          .max(200, "Keep each path to 200 characters or fewer.")
+          .regex(
+            /^\/[^?#\s]*$/,
+            "Use a path starting with /, with no query string, like /contact.",
+          ),
+      )
+      .max(9, "Track at most ten pages, the home page included."),
+  )
+  .transform(paths => ["/", ...paths]);
+
+/** An optional target: blank means Google's threshold applies. */
+const optionalTarget = (label: string, max?: number) =>
+  z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      const trimmed = (value ?? "").trim();
+      if (trimmed === "") return null;
+      const number = Number(trimmed);
+      if (!Number.isFinite(number)) {
+        ctx.addIssue({ code: "custom", message: `Enter a number for the ${label}.` });
+        return z.NEVER;
+      }
+      if (number < 0) {
+        ctx.addIssue({ code: "custom", message: `The ${label} cannot be negative.` });
+        return z.NEVER;
+      }
+      if (max !== undefined && number > max) {
+        ctx.addIssue({ code: "custom", message: `The ${label} is at most ${max}.` });
+        return z.NEVER;
+      }
+      return number;
+    });
+
 /** Brand terms, one per line or comma-separated: trimmed, lowercased, no repeats. */
 export const brandTerms = z
   .string()
@@ -152,6 +207,11 @@ export const siteSchema = z
     usesHeatmaps: checkbox,
     replacesExistingSite: checkbox,
     brandTerms,
+    trackedPages,
+    budgetLcpMs: optionalTarget("LCP target"),
+    budgetInpMs: optionalTarget("INP target"),
+    budgetCls: optionalTarget("CLS target", 1),
+    budgetLabScore: optionalTarget("lab score target", 100),
   })
   // The consent banner follows the tier (add-provisioning, design D5a): Insights
   // and Growth mean a banner, Essentials none. It is never set on its own.

@@ -52,6 +52,9 @@ export default defineRailway(() => {
       // dormant. The Google key is the service account's JSON, base64.
       GOOGLE_SERVICE_ACCOUNT_KEY: preserve(),
       BING_WEBMASTER_API_KEY: preserve(),
+      // Page experience (add-page-experience): the Chrome UX Report and
+      // PageSpeed Insights, restricted to those two APIs. Unset: dormant.
+      GOOGLE_API_KEY: preserve(),
     },
   });
 
@@ -82,6 +85,9 @@ export default defineRailway(() => {
       // The nightly search pull runs here, so it needs both search credentials.
       GOOGLE_SERVICE_ACCOUNT_KEY: preserve(),
       BING_WEBMASTER_API_KEY: preserve(),
+      // Page experience (add-page-experience): the Chrome UX Report and
+      // PageSpeed Insights, restricted to those two APIs. Unset: dormant.
+      GOOGLE_API_KEY: preserve(),
     },
   });
 

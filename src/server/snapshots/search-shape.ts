@@ -10,8 +10,13 @@ import { addDays, dayIn } from "./window";
 export const GOOGLE_TIMEZONE = "America/Los_Angeles";
 /** Days re-pulled every night, because both engines revise recent figures. */
 export const SEARCH_WINDOW_DAYS = 10;
-/** How far back a replacement site's first pull reaches: Google keeps 16 months. */
-export const BACKFILL_DAYS = 486;
+/**
+ * How far back a replacement site's first pull reaches. Google keeps about 16
+ * months: on 27 September 2026 Luxury Gardens' property held 500 days, from 16
+ * May 2025. Asking for a little more costs nothing; the engine returns what it
+ * has.
+ */
+export const BACKFILL_DAYS = 500;
 /** Longest span asked for in one call, so no single call runs long. */
 export const CHUNK_DAYS = 90;
 /** Queries and pages kept per day, by impressions. */

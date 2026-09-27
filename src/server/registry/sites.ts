@@ -1,5 +1,6 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
+import type { z } from "zod";
 import { getDb } from "@/db/client";
 import {
   clients,
@@ -7,7 +8,9 @@ import {
   siteChanges,
   siteCommercialContext,
   siteExpectedEvents,
+  sitePerformanceBudgets,
   sites,
+  siteTrackedPages,
 } from "@/db/schema";
 import { eventsFor, type ListedEvent } from "@/lib/event-list";
 import { requireSession } from "@/server/session";
@@ -33,6 +36,53 @@ function defaultExpectedEvents(
   return events.map(event => event.name).filter(name => hasConsentBanner || name !== CONSENT_EVENT);
 }
 
+type ParsedSite = z.output<typeof siteSchema>;
+type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+/** The form's page-experience fields are not columns on `sites`. */
+function splitSite(data: ParsedSite) {
+  const { trackedPages, budgetLcpMs, budgetInpMs, budgetCls, budgetLabScore, ...row } = data;
+  return {
+    row,
+    trackedPages,
+    budget: { lcpMs: budgetLcpMs, inpMs: budgetInpMs, cls: budgetCls, labScore: budgetLabScore },
+  };
+}
+
+/** Tracked pages become exactly the list given; the budget row exists only with a target in it. */
+async function writePageExperienceSettings(
+  tx: Tx,
+  siteId: string,
+  pages: string[],
+  budget: ReturnType<typeof splitSite>["budget"],
+): Promise<void> {
+  await tx
+    .delete(siteTrackedPages)
+    .where(and(eq(siteTrackedPages.siteId, siteId), notInArray(siteTrackedPages.path, pages)));
+  await tx
+    .insert(siteTrackedPages)
+    .values(pages.map(path => ({ siteId, path })))
+    .onConflictDoNothing();
+
+  const values = {
+    lcpMs: budget.lcpMs === null ? null : Math.round(budget.lcpMs),
+    inpMs: budget.inpMs === null ? null : Math.round(budget.inpMs),
+    cls: budget.cls === null ? null : String(budget.cls),
+    labScore: budget.labScore === null ? null : Math.round(budget.labScore),
+  };
+  if (Object.values(values).every(value => value === null)) {
+    await tx.delete(sitePerformanceBudgets).where(eq(sitePerformanceBudgets.siteId, siteId));
+    return;
+  }
+  await tx
+    .insert(sitePerformanceBudgets)
+    .values({ siteId, ...values })
+    .onConflictDoUpdate({
+      target: sitePerformanceBudgets.siteId,
+      set: { ...values, updatedAt: new Date() },
+    });
+}
+
 export async function createSite(
   clientSlug: string,
   input: unknown,
@@ -51,10 +101,12 @@ export async function createSite(
   try {
     // One transaction: a site never exists without its default expected events.
     const siteId = await getDb().transaction(async tx => {
+      const { row, trackedPages, budget } = splitSite(parsed.data);
       const [site] = await tx
         .insert(sites)
-        .values({ ...parsed.data, clientId: client.id })
+        .values({ ...row, clientId: client.id })
         .returning({ id: sites.id });
+      await writePageExperienceSettings(tx, site!.id, trackedPages, budget);
       const names = defaultExpectedEvents(
         deps.eventsFor(parsed.data.taxonomyVersion) ?? [],
         parsed.data.hasConsentBanner,
@@ -102,10 +154,12 @@ export async function updateSite(siteId: string, input: unknown): Promise<Result
       if (!before) return false;
       // A confirmation is for one tier, so a change of tier clears it (design D5a).
       const tierChanged = parsed.data.measurementTier !== before.measurementTier;
+      const { row, trackedPages, budget } = splitSite(parsed.data);
+      await writePageExperienceSettings(tx, siteId, trackedPages, budget);
       await tx
         .update(sites)
         .set({
-          ...parsed.data,
+          ...row,
           ...(tierChanged
             ? { tierConfirmedFor: null, tierConfirmedAt: null, tierConfirmedBy: null }
             : {}),

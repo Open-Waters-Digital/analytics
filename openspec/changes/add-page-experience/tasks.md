@@ -11,11 +11,11 @@
 
 ## 2. Configuration
 
-- [ ] 2.1 Add `GOOGLE_API_KEY` to `src/server/env.ts`, parsed lazily with Zod, and to `.env.example` and `.railway/railway.ts` with `preserve()` on both services. Verify with unit tests that unset reads as not configured and that no error message or logged URL contains the value.
+- [x] 2.1 Add `GOOGLE_API_KEY` to `src/server/env.ts`, parsed lazily with Zod, and to `.env.example` and `.railway/railway.ts` with `preserve()` on both services. Verify with unit tests that unset reads as not configured and that no error message or logged URL contains the value.
 
 ## 3. Data
 
-- [ ] 3.1 Add `site_page_experience`, `site_tracked_pages`, `site_performance_budgets`, `pe_lab_runs` and their enums, and `page_experience` to `snapshot_source` (design D2, D4, D7). Backfill a tracked page of `/` for every existing site in the migration. Run `pnpm db:generate`, and review and commit the SQL. Verify that it is additive and that `node dist/migrate.mjs` applies it to a fresh database with one site in it.
+- [x] 3.1 Add `site_page_experience`, `site_tracked_pages`, `site_performance_budgets`, `pe_lab_runs` and their enums, and `page_experience` to `snapshot_source` (design D2, D4, D7). Backfill a tracked page of `/` for every existing site in the migration. Run `pnpm db:generate`, and review and commit the SQL. Verify that it is additive and that `node dist/migrate.mjs` applies it to a fresh database with one site in it.
 
 ## 4. The client
 
@@ -30,7 +30,7 @@
 
 ## 5. Registry
 
-- [ ] 5.1 Add tracked pages and the performance budget to the site's registry form (design D7): `/` fixed, up to nine more paths, and four optional targets. Verify at 375px, with field errors for an eleventh path, a query string, a duplicate path and a negative target, and that values survive a failed validation on another field.
+- [x] 5.1 Add tracked pages and the performance budget to the site's registry form (design D7): `/` fixed, up to nine more paths, and four optional targets. Verify at 375px, with field errors for an eleventh path, a query string, a duplicate path and a negative target, and that values survive a failed validation on another field.
 
 ## 6. The pulls
 

@@ -43,7 +43,7 @@ describe("windows", () => {
     const window = { from: "2026-09-15", to: "2026-09-24" };
     const backfill = backfillRange(window);
     expect(backfill.to).toBe("2026-09-14");
-    expect(backfill.from).toBe("2025-05-26");
+    expect(backfill.from).toBe("2025-05-12");
     const parts = chunks(backfill);
     expect(parts[0]?.from).toBe(backfill.from);
     expect(parts.at(-1)?.to).toBe(backfill.to);

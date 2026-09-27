@@ -31,6 +31,7 @@ export const snapshotSource = pgEnum("snapshot_source", [
   "posthog",
   "google_search",
   "bing_search",
+  "page_experience",
 ]);
 export const searchEngine = pgEnum("search_engine", ["google", "bing"]);
 export const searchBreakdown = pgEnum("search_breakdown", ["total", "device", "query", "page"]);

@@ -156,6 +156,17 @@ export function googleServiceAccount(): GoogleServiceAccount | null {
   return cachedGoogle;
 }
 
+/**
+ * The Open Waters Google API key for the Chrome UX Report and PageSpeed
+ * Insights (add-page-experience, design D1). Restricted in Google Cloud to those
+ * two APIs. Unset: page experience is dormant. It rides in the request URL, as
+ * Google requires, so no request URL is ever logged.
+ */
+export function googleApiKey(): string | null {
+  const value = process.env["GOOGLE_API_KEY"]?.trim();
+  return value ? value : null;
+}
+
 /** The Open Waters Bing Webmaster Tools account's API key. Unset: Bing is dormant. */
 export function bingWebmasterApiKey(): string | null {
   const value = process.env["BING_WEBMASTER_API_KEY"]?.trim();

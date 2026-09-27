@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  googleApiKey,
   MissingConfigurationError,
   parseDatabaseEnv,
   parseEnv,
   parseGoogleServiceAccount,
 } from "./env";
+
+describe("googleApiKey", () => {
+  it("reads blank as not configured, as the test environment sets it", () => {
+    expect(googleApiKey()).toBeNull();
+  });
+});
 
 describe("parseGoogleServiceAccount", () => {
   const privateKey = "-----BEGIN PRIVATE KEY-----\nMIIsecretmaterial\n-----END PRIVATE KEY-----\n";

@@ -10,7 +10,9 @@ import {
   siteChanges,
   siteCommercialContext,
   siteExpectedEvents,
+  sitePerformanceBudgets,
   sites,
+  siteTrackedPages,
   users,
 } from "@/db/schema";
 import { requireSession } from "@/server/session";
@@ -73,6 +75,14 @@ export interface SiteDetail {
   bing: SearchPropertyDetail | null;
   replacesExistingSite: boolean;
   brandTerms: string[];
+  /** Page experience (add-page-experience): tracked paths, `/` first, and targets. */
+  trackedPages: string[];
+  budget: {
+    lcpMs: number | null;
+    inpMs: number | null;
+    cls: string | null;
+    labScore: number | null;
+  } | null;
   expectedEvents: string[];
   commercial: {
     leadValueMinor: number | null;
@@ -187,9 +197,9 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
   ]);
 
   const siteIds = siteRows.map(site => site.id);
-  const [connections, properties, expected, commercial, changes, bingSites] =
+  const [connections, properties, expected, commercial, changes, bingSites, tracked, budgets] =
     siteIds.length === 0
-      ? [[], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], []]
       : await Promise.all([
           db
             .select({
@@ -236,6 +246,14 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
             })
             .from(bingWebmasterSites)
             .where(inArray(bingWebmasterSites.siteId, siteIds)),
+          db
+            .select({ siteId: siteTrackedPages.siteId, path: siteTrackedPages.path })
+            .from(siteTrackedPages)
+            .where(inArray(siteTrackedPages.siteId, siteIds)),
+          db
+            .select()
+            .from(sitePerformanceBudgets)
+            .where(inArray(sitePerformanceBudgets.siteId, siteIds)),
         ]);
 
   const confirmerIds = siteRows
@@ -306,6 +324,16 @@ export async function getClientDetail(slug: string): Promise<ClientDetail | null
       })(),
       replacesExistingSite: site.replacesExistingSite,
       brandTerms: site.brandTerms,
+      trackedPages: tracked
+        .filter(row => row.siteId === site.id)
+        .map(row => row.path)
+        .sort((a, b) => (a === "/" ? -1 : b === "/" ? 1 : a.localeCompare(b))),
+      budget: (() => {
+        const row = budgets.find(candidate => candidate.siteId === site.id);
+        return row
+          ? { lcpMs: row.lcpMs, inpMs: row.inpMs, cls: row.cls, labScore: row.labScore }
+          : null;
+      })(),
       expectedEvents: expected.filter(row => row.siteId === site.id).map(row => row.event),
       commercial: context
         ? {

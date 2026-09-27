@@ -11,5 +11,6 @@
  */
 export * from "./auth-schema";
 export * from "./registry-schema";
+export * from "./page-experience-schema";
 export * from "./provisioning-schema";
 export * from "./snapshot-schema";

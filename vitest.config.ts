@@ -29,6 +29,7 @@ export default defineConfig({
       // records a property must not reach Google or Bing.
       GOOGLE_SERVICE_ACCOUNT_KEY: "",
       BING_WEBMASTER_API_KEY: "",
+      GOOGLE_API_KEY: "",
     },
     /*
      * One file at a time. Every file shares the one test database, and the

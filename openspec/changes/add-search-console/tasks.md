@@ -5,13 +5,15 @@
 
 ## 1. Confirming the APIs
 
-- [ ] 1.1 With the service account added to one real property as a restricted user, confirm:
+- [x] 1.1 With the service account added to one real property as a restricted user, confirm:
   - the `permissionLevel` values `GET sites/{siteUrl}` returns, and what it returns for an account not added
   - the Search Analytics response shape for `date`, `date,device`, `date,query` and `date,page`
   - the row ordering, `rowLimit` and `startRow` paging
   - the earliest date the API returns for the property, and whether a newly verified property shows data from before its verification
   - the status codes for no access, not found and quota
   - that a restricted user can call `urlInspection.index.inspect` and `GET sitemaps`, and the inspection result's fields
+
+  Confirmed on 27 September 2026 against Luxury Gardens' property, `https://www.luxury-gardens.co.uk/`. The unshared half was confirmed on 25 September: a 404 for a property never shared, which is why there is no "not found" status. Findings are in `src/server/search-console.ts`'s header. One change followed: the backfill reaches 500 days, not 486, because the property held data from 16 May 2025.
 
   Verify by recording the findings, with the date, in `src/server/search-console.ts`'s header.
 
@@ -83,6 +85,7 @@
 ## 9. Real run
 
 - [ ] 9.1 Set both keys on the web service, check one real client's property and Bing site, run the job once, and read the report. Verify by recording both check results, the rows stored for each backfill, and one headline figure per engine checked against that engine's own screen for the same period, in the task note.
+      Google half, 27 September 2026, through `runSearchPass` and `indexingPass` against Luxury Gardens' property on a throwaway database, marked as a replacement site: ok in 17 seconds; 487 days of totals, 1,432 device rows, 130,051 query rows, 8,780 page rows; for 29 August to 25 September, 117 clicks, 11,737 impressions, average position 19.9; the query rows cover 939 of 1,950 clicks; 33 sitemap pages inspected, 20 indexed and 13 not, most of them the Wix duplicates `docs/current-site-issues.md` lists. Still open: the same through the production app, and Bing, which Luxury Gardens does not have yet.
 
 ## 10. Documents
 

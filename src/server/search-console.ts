@@ -17,9 +17,21 @@ import { CHECK_TIMEOUT_MS, QUERY_TIMEOUT_MS } from "@/server/posthog";
  *   "no access", not "does not exist".
  * - Search Analytics and URL Inspection answer 403 for an unshared property.
  *
- * Still to confirm with a shared property (task 1.1, second half): the Search
- * Analytics row shape, paging, the earliest date, sitemaps and the inspection
- * result's fields. The schemas below follow Google's published API reference.
+ * Confirmed on 27 September 2026 against Luxury Gardens' property,
+ * `https://www.luxury-gardens.co.uk/` (task 1.1, second half):
+ * - Search Analytics rows are `{ keys, clicks, impressions, ctr, position }`,
+ *   beside `responseAggregationType` and `metadata`, ordered by clicks.
+ *   `dataState: "all"` includes today's provisional day.
+ * - The property held 500 days, from 16 May 2025: Google's 16 months.
+ * - `sitemaps` lists a sitemap index and a page sitemap, with
+ *   `isSitemapsIndex`, `contents[].submitted` and `.indexed`.
+ * - URL Inspection's `indexStatusResult` carries `verdict` (`PASS`),
+ *   `coverageState` ("Submitted and indexed", "Crawled - currently not
+ *   indexed", "URL is unknown to Google"), and `lastCrawlTime`.
+ * - A property shared as a restricted user can report `siteFullUser`: Google
+ *   reports the effective level, and either is readable.
+ * - Rows by page can sum to slightly more clicks than the totals, because
+ *   Google aggregates by page differently. Top pages are a list, not a share.
  *
  * No `server-only` import: the nightly job runs this in plain Node, where that
  * marker throws, as with ./posthog.ts. The lint rule that keeps src/components

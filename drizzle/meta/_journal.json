@@ -50,6 +50,20 @@
       "when": 1790349006648,
       "tag": "0006_search",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790366171934,
+      "tag": "0007_page_experience",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790366181750,
+      "tag": "0008_page_experience_backfill",
+      "breakpoints": true
     }
   ]
 }
